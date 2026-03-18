@@ -661,7 +661,9 @@ export default function App() {
               <Calendar size={48} className="text-white" />
             </div>
             <h1 className="text-5xl font-black tracking-tighter text-gray-900">choicrew</h1>
-            <p className="text-xl text-gray-500 font-medium">スキマ時間を価値に変える、<br/>次世代シフト管理ツール</p>
+<p className="text-xl text-gray-500 font-medium">
+空き時間で、仲間をサポート。<br/>スキマ時間を楽しく活用
+</p>
           </div>
 
           <div className="grid gap-4">
