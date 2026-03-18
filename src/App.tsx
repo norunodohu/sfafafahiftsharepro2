@@ -28,7 +28,7 @@ import {
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut, 
-  signInAnonymously
+  signInWithCustomToken
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -290,59 +290,48 @@ export default function App() {
     }
   }, []);
 
-  const processLineProfile = useCallback(async (profile: { userId: string, displayName: string, pictureUrl?: string }) => {
+  const processLineProfile = useCallback(async (profile: { userId: string, displayName: string, pictureUrl?: string }, customToken?: string | null) => {
     if (!profile) return;
     setIsProcessingLine(true);
     try {
-      let firebaseUser = auth.currentUser;
-      if (!firebaseUser) {
-        const res = await signInAnonymously(auth);
-        firebaseUser = res.user;
+      if (customToken) {
+        await signInWithCustomToken(auth, customToken);
       }
       
-      const q = query(collection(db, "users"), where("line_user_id", "==", profile.userId));
-      const snap = await getDocs(q);
+      const firebaseUser = auth.currentUser;
+      if (!firebaseUser) throw new Error("Firebase login failed");
       
-      if (!snap.empty) {
-        const userData = snap.docs[0].data() as UserProfile;
-        if (userData.uid !== firebaseUser.uid) {
-          await migrateUserData(userData.uid, firebaseUser.uid);
-          const updatedProfile = { 
-            ...userData, 
-            uid: firebaseUser.uid, 
-            name: profile.displayName || userData.name,
-            line_name: profile.displayName,
-            line_picture: profile.pictureUrl
-          };
-          await setDoc(doc(db, "users", firebaseUser.uid), updatedProfile);
-          if (!userData.email) await deleteDoc(doc(db, "users", userData.uid));
-          setCurrentUser(updatedProfile);
-        } else {
-          setCurrentUser(userData);
-        }
+      const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+      if (userDoc.exists()) {
+        const existingData = userDoc.data() as UserProfile;
+        const updatedProfile = {
+          ...existingData,
+          uid: firebaseUser.uid,
+          name: profile.displayName || existingData.name,
+          line_user_id: profile.userId,
+          notification_pref: "line"
+        };
+        await updateDoc(doc(db, "users", firebaseUser.uid), {
+          line_user_id: profile.userId,
+          notification_pref: "line",
+          name: updatedProfile.name
+        });
+        setCurrentUser(updatedProfile);
       } else {
-        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (userDoc.exists()) {
-          const existingData = userDoc.data() as UserProfile;
-          const updatedProfile = { ...existingData, line_user_id: profile.userId, notification_pref: "line" };
-          await updateDoc(doc(db, "users", firebaseUser.uid), { line_user_id: profile.userId, notification_pref: "line" });
-          setCurrentUser(updatedProfile);
-        } else {
-          const newProfile: UserProfile = {
-            uid: firebaseUser.uid,
-            search_id: firebaseUser.uid.slice(0, 8),
-            name: profile.displayName || "User",
-            email: "",
-            role: "staff",
-            current_role: "staff",
-            share_token: Math.random().toString(36).substring(2, 15),
-            accept_requests: true,
-            line_user_id: profile.userId,
-            notification_pref: "line"
-          };
-          await setDoc(doc(db, "users", firebaseUser.uid), newProfile);
-          setCurrentUser(newProfile);
-        }
+        const newProfile: UserProfile = {
+          uid: firebaseUser.uid,
+          search_id: firebaseUser.uid.slice(0, 8),
+          name: profile.displayName || "User",
+          email: firebaseUser.email || "",
+          role: "staff",
+          current_role: "staff",
+          share_token: Math.random().toString(36).substring(2, 15),
+          accept_requests: true,
+          line_user_id: profile.userId,
+          notification_pref: "line"
+        };
+        await setDoc(doc(db, "users", firebaseUser.uid), newProfile);
+        setCurrentUser(newProfile);
       }
       setIsLoggedIn(true);
     } catch (error: unknown) {
@@ -398,7 +387,7 @@ export default function App() {
     const lineUserParam = urlParams.get('line_user');
     if (lineUserParam && lineUserParam !== "undefined") {
       try {
-        processLineProfile(JSON.parse(decodeURIComponent(lineUserParam)));
+        processLineProfile(JSON.parse(decodeURIComponent(lineUserParam)), urlParams.get("custom_token"));
       } catch (err) {
         console.error("Failed to parse line_user param:", err);
       }
@@ -406,7 +395,7 @@ export default function App() {
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'LINE_AUTH_SUCCESS') {
-        processLineProfile(event.data.profile);
+        processLineProfile(event.data.profile, event.data.customToken);
       }
     };
     window.addEventListener('message', handleMessage);
@@ -540,11 +529,7 @@ export default function App() {
     }
   };
   const handleGuestLogin = async () => {
-    try {
-      await signInAnonymously(auth);
-    } catch (err) {
-      console.error("Guest login error:", err);
-    }
+    alert("ゲストログインは現在使えません。Google か LINE でログインしてください。");
   };
   const handleLineLogin = async () => {
     try {

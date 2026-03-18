@@ -4,6 +4,8 @@ import path from "path";
 import axios from "axios";
 import cors from "cors";
 import dotenv from "dotenv";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { fileURLToPath } from 'url';
 
 dotenv.config();
@@ -14,6 +16,20 @@ path.dirname(__filename);
 const app = express();
 export default app; // Export for Vercel
 const PORT = 3000;
+
+const adminProjectId = process.env.FIREBASE_PROJECT_ID;
+const adminClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const adminPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+
+if (!getApps().length && adminProjectId && adminClientEmail && adminPrivateKey) {
+  initializeApp({
+    credential: cert({
+      projectId: adminProjectId,
+      clientEmail: adminClientEmail,
+      privateKey: adminPrivateKey,
+    }),
+  });
+}
 
 app.use(cors());
 app.use(express.json());
@@ -90,6 +106,16 @@ app.get("/api/auth/line/callback", async (req, res) => {
     });
 
     const profile = profileResponse.data || {};
+    const customToken = getApps().length
+      ? await getAdminAuth().createCustomToken(`line_${profile.userId}`, {
+          line_user_id: profile.userId,
+          line_display_name: profile.displayName,
+        })
+      : null;
+
+    if (!customToken) {
+      throw new Error("Firebase Admin SDK is not configured");
+    }
 
     res.send(`
       <html>
@@ -98,11 +124,12 @@ app.get("/api/auth/line/callback", async (req, res) => {
             if (window.opener) {
               window.opener.postMessage({ 
                 type: 'LINE_AUTH_SUCCESS', 
-                profile: ${JSON.stringify(profile)} 
+                profile: ${JSON.stringify(profile)},
+                customToken: ${JSON.stringify(customToken)}
               }, '*');
               window.close();
             } else {
-              window.location.href = '/?line_user=' + encodeURIComponent(JSON.stringify(${JSON.stringify(profile)}));
+              window.location.href = '/?line_user=' + encodeURIComponent(JSON.stringify(${JSON.stringify(profile)})) + '&custom_token=' + encodeURIComponent(${JSON.stringify(customToken)});
             }
           </script>
           <p>LINE連携が完了しました。このウィンドウを閉じてください。</p>
