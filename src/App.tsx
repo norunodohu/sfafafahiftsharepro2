@@ -342,7 +342,9 @@ export default function App() {
       body: JSON.stringify({ lineUserId, message })
     });
     if (!response.ok) {
-      throw new Error("LINE notification failed");
+      const data = await response.json().catch(() => null);
+      console.warn("LINE notification failed:", data || response.statusText);
+      return;
     }
   };
 

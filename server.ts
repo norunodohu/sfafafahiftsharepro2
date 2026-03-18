@@ -154,10 +154,13 @@ app.get("/api/auth/line/callback", async (req, res) => {
 // LINE Messaging API
 app.post("/api/notify", async (req, res) => {
   const { lineUserId, message } = req.body;
-  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
 
   if (!accessToken) {
     return res.status(503).json({ error: "LINE_CHANNEL_ACCESS_TOKEN not configured" });
+  }
+  if (!lineUserId || !message) {
+    return res.status(400).json({ error: "lineUserId and message are required" });
   }
 
   try {
@@ -174,7 +177,10 @@ app.post("/api/notify", async (req, res) => {
   } catch (error: unknown) {
     const err = error as { response?: { data?: Record<string, unknown> }, message?: string };
     console.error("LINE Messaging Error:", err.response?.data || err.message);
-    res.status(500).json({ error: "Failed to send LINE message" });
+    res.status(500).json({
+      error: "Failed to send LINE message",
+      details: err.response?.data || err.message || "unknown",
+    });
   }
 });
 
