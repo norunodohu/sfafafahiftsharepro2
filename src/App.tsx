@@ -671,7 +671,7 @@ export default function App() {
             <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-6 transform rotate-12 shadow-xl shadow-blue-100">
               <Calendar size={40} className="text-[#3b82f6]" />
             </div>
-            <h1 className="text-4xl font-bold tracking-tighter font-righteous text-[#3b82f6]">ShiftShare</h1>
+            <h1 className="text-4xl font-bold tracking-tighter font-righteous text-[#3b82f6]">SukiMach</h1>
             <p className="text-black/40 font-medium">スマートなシフト管理と共有</p>
           </div>
           <div className="space-y-4 pt-8">
@@ -700,7 +700,7 @@ export default function App() {
           <div className="w-10 h-10 bg-[#3b82f6] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
             <LayoutDashboard size={24} />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-[#3b82f6]">ShiftShare</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[#3b82f6]">SukiMach</h1>
         </div>
         <nav className="flex flex-col gap-2">
           <button onClick={() => setView("dashboard")} className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition-all ${view === "dashboard" ? "bg-[#3b82f6] text-white shadow-lg shadow-blue-200" : "text-black/40 hover:bg-black/5"}`}>
@@ -723,7 +723,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-h-screen pb-20 lg:pb-0">
         <header className="px-6 py-4 flex items-center justify-between border-b border-black/5 sticky top-0 bg-white/80 backdrop-blur-md z-10 lg:bg-white lg:px-12">
           <div className="lg:hidden">
-            <h1 className="text-xl font-bold tracking-tight text-[#3b82f6]">ShiftShare</h1>
+            <h1 className="text-xl font-bold tracking-tight text-[#3b82f6]">SukiMach</h1>
           </div>
           <div className="flex gap-4 relative ml-auto">
             <button onClick={() => setShowBellDropdown(!showBellDropdown)} className="p-2 rounded-full hover:bg-black/5 transition-colors relative">
