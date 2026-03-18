@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback } from "react";
 import { 
   Calendar, 
   Clock, 
@@ -17,7 +17,8 @@ import {
   MessageCircle, 
   LayoutDashboard,
   CalendarDays,
-  ArrowRight
+  ArrowRight,
+  Pencil
 } from "lucide-react";
 import { 
   initializeApp 
@@ -26,6 +27,7 @@ import {
   getAuth, 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInAnonymously,
   GoogleAuthProvider, 
   signOut, 
   signInWithCustomToken
@@ -93,7 +95,7 @@ const handleFirestoreError = (error: Error | unknown, operationType: OperationTy
   const errorMessage = error instanceof Error ? error.message : String(error);
   
   if (errorMessage.includes("Quota exceeded")) {
-    alert("Firebaseの無料枠の制限を超えました。しばらく時間をおいてから再度お試しください。");
+    alert("Firebase縺ｮ辟｡譁呎棧縺ｮ蛻ｶ髯舌ｒ雜・∴縺ｾ縺励◆縲ゅ＠縺ｰ繧峨￥譎る俣繧偵♀縺・※縺九ｉ蜀榊ｺｦ縺願ｩｦ縺励￥縺縺輔＞縲・);
   }
 
   const errInfo: FirestoreErrorInfo = {
@@ -254,8 +256,62 @@ export default function App() {
   const [dashboardDateOffset, setDashboardDateOffset] = useState(0);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingAvailability, setEditingAvailability] = useState<Availability | null>(null);
+  const [newAvailDate, setNewAvailDate] = useState(format(selectedDate, "yyyy-MM-dd"));
   const [newAvailTime, setNewAvailTime] = useState({ start: "10:00", end: "15:00" });
   const [newAvailNote, setNewAvailNote] = useState("");
+  const [newAvailStatus, setNewAvailStatus] = useState<Availability["status"]>("open");
+
+  const isGuestUser = !currentUser?.email && !currentUser?.line_user_id;
+  const accountLabel = isGuestUser ? "ゲストユーザー" : "クルー";
+  const shareLink = currentUser ? `${window.location.origin}?share=${currentUser.share_token}` : "";
+  const incomingRequests = currentUser
+    ? requests.filter(r => r.staff_id === currentUser.uid && r.status === "pending")
+    : [];
+  const openAvailabilityModal = (availability?: Availability) => {
+    if (availability) {
+      setEditingAvailability(availability);
+      setNewAvailDate(availability.date);
+      setNewAvailTime({ start: availability.start_time, end: availability.end_time });
+      setNewAvailNote(availability.note || "");
+      setNewAvailStatus(availability.status);
+    } else {
+      setEditingAvailability(null);
+      setNewAvailDate(format(selectedDate, "yyyy-MM-dd"));
+      setNewAvailTime({ start: "10:00", end: "15:00" });
+      setNewAvailNote("");
+      setNewAvailStatus("open");
+    }
+    setShowAddModal(true);
+  };
+
+  const closeAvailabilityModal = () => {
+    setShowAddModal(false);
+    setEditingAvailability(null);
+  };
+
+  const createNotification = async (userId: string, type: Notification["type"], message: string, date?: string) => {
+    await addDoc(collection(db, "notifications"), {
+      user_id: userId,
+      type,
+      message,
+      date,
+      timestamp: serverTimestamp(),
+      read: false
+    });
+  };
+
+  const sendLineNotification = async (lineUserId: string | undefined, message: string) => {
+    if (!lineUserId) return;
+    const response = await fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lineUserId, message })
+    });
+    if (!response.ok) {
+      throw new Error("LINE notification failed");
+    }
+  };
   
   useEffect(() => {
     const handleResize = () => {}; // No longer needed for isDesktop
@@ -365,7 +421,7 @@ export default function App() {
             const newProfile: UserProfile = {
               uid: user.uid,
               search_id: user.uid.slice(0, 8),
-              name: user.displayName || (user.isAnonymous ? "ゲスト" : "ユーザー"),
+              name: user.displayName || (user.isAnonymous ? "繧ｲ繧ｹ繝医Θ繝ｼ繧ｶ繝ｼ" : "繧ｯ繝ｫ繝ｼ"),
               email: user.email || "",
               role: "staff",
               current_role: "staff",
@@ -541,8 +597,12 @@ export default function App() {
       console.error("Google login error:", err);
     }
   };
-  const handleGuestLogin = async () => {
-    alert("ゲストログインは現在使えません。Google か LINE でログインしてください。");
+  const handleGuestLoginSafe = async () => {
+    try {
+      await signInAnonymously(auth);
+    } catch (err) {
+      console.error("Guest login error:", err);
+    }
   };
   const handleLineLogin = async () => {
     try {
@@ -566,24 +626,36 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
-  const handleAddAvailability = async (status: "open" | "busy") => {
+  const handleSaveAvailability = async () => {
     if (!currentUser) return;
     setIsSaving(true);
     try {
-      await addDoc(collection(db, "availabilities"), {
+      const payload = {
         user_id: currentUser.uid,
         user_name: currentUser.name,
-        date: format(selectedDate, "yyyy-MM-dd"),
+        date: newAvailDate,
         start_time: newAvailTime.start,
         end_time: newAvailTime.end,
-        status: status,
+        status: newAvailStatus,
         note: newAvailNote,
-        created_at: serverTimestamp()
-      });
-      setShowAddModal(false);
+      };
+
+      if (editingAvailability) {
+        await updateDoc(doc(db, "availabilities", editingAvailability.id), payload);
+      } else {
+        await addDoc(collection(db, "availabilities"), {
+          ...payload,
+          created_at: serverTimestamp()
+        });
+      }
+
+      closeAvailabilityModal();
       setNewAvailNote("");
-    } catch (e: unknown) { console.error(e); }
-    finally { setIsSaving(false); }
+    } catch (e: unknown) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteAvailability = async (id: string) => {
@@ -609,31 +681,97 @@ export default function App() {
         status: "pending",
         created_at: serverTimestamp()
       };
-      await addDoc(collection(db, "requests"), reqData);
-      
-      // Notify via LINE if possible
+      const requestRef = await addDoc(collection(db, "requests"), reqData);
+
       const staffDoc = await getDoc(doc(db, "users", availability.user_id));
       const staffData = staffDoc.data() as UserProfile;
+
+      await createNotification(
+        availability.user_id,
+        "request",
+        `${currentUser.name}さんから依頼が届きました。${availability.date} ${availability.start_time}-${availability.end_time}`,
+        availability.date
+      );
+
       if (staffData?.line_user_id) {
-        await fetch("/api/notify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lineUserId: staffData.line_user_id,
-            message: `${currentUser.name}さんからシフト依頼が届きました！\n日時: ${availability.date} ${availability.start_time}-${availability.end_time}`
-          })
-        });
+        await sendLineNotification(
+          staffData.line_user_id,
+          `${currentUser.name}さんから依頼が届きました。\n${availability.date} ${availability.start_time}-${availability.end_time}`
+        );
       }
-      
-      alert("依頼を送信しました！");
-    } catch (e: unknown) { console.error(e); }
+
+      console.log("request created:", requestRef.id);
+      alert("依頼を送信しました。");
+    } catch (e: unknown) {
+      console.error(e);
+    }
+  };
+
+  const handleOpenNotifications = async () => {
+    const opening = !showBellDropdown;
+    setShowBellDropdown(opening);
+    try {
+      const unread = notifications.filter(n => !n.read);
+      if (opening && unread.length > 0) {
+        const batch = writeBatch(db);
+        unread.forEach(n => batch.update(doc(db, "notifications", n.id), { read: true }));
+        await batch.commit();
+      }
+    } catch (err) {
+      console.error("Failed to mark notifications as read:", err);
+    }
+  };
+
+  const handleApproveRequest = async (request: ShiftRequest) => {
+    if (!currentUser) return;
+    await updateDoc(doc(db, "requests", request.id), { status: "approved" });
+    await updateDoc(doc(db, "availabilities", request.availability_id), { status: "confirmed" });
+
+    const managerDoc = await getDoc(doc(db, "users", request.manager_id));
+    const managerData = managerDoc.data() as UserProfile;
+    await createNotification(
+      request.manager_id,
+      "approval",
+      `${currentUser.name}さんが依頼を承認しました。${request.date} ${request.start_time}-${request.end_time}`,
+      request.date
+    );
+
+    if (managerData?.line_user_id) {
+      await sendLineNotification(
+        managerData.line_user_id,
+        `${currentUser.name}さんが依頼を承認しました。\n${request.date} ${request.start_time}-${request.end_time}`
+      );
+    }
+    alert("承認しました。");
+  };
+
+  const handleRejectRequest = async (request: ShiftRequest) => {
+    if (!currentUser) return;
+    await updateDoc(doc(db, "requests", request.id), { status: "canceled" });
+    await updateDoc(doc(db, "availabilities", request.availability_id), { status: "open" });
+
+    const managerDoc = await getDoc(doc(db, "users", request.manager_id));
+    const managerData = managerDoc.data() as UserProfile;
+    await createNotification(
+      request.manager_id,
+      "decline",
+      `${currentUser.name}さんが依頼を削除しました。${request.date} ${request.start_time}-${request.end_time}`,
+      request.date
+    );
+
+    if (managerData?.line_user_id) {
+      await sendLineNotification(
+        managerData.line_user_id,
+        `${currentUser.name}さんが依頼を削除しました。\n${request.date} ${request.start_time}-${request.end_time}`
+      );
+    }
+    alert("削除しました。");
   };
 
   const copyShareLink = () => {
     if (!currentUser) return;
-    const link = `${window.location.origin}?share=${currentUser.share_token}`;
-    navigator.clipboard.writeText(link);
-    alert("共有リンクをコピーしました！");
+    navigator.clipboard.writeText(shareLink);
+    alert("共有リンクをコピーしました。");
   };
 
   // Renderers
@@ -662,28 +800,28 @@ export default function App() {
               className="w-full max-w-[320px] mx-auto drop-shadow-[0_24px_40px_rgba(37,99,235,0.16)]"
             />
 <p className="text-xl text-gray-500 font-medium">
-空き時間で、仲間をサポート。<br/>スキマ時間を楽しく活用
+遨ｺ縺肴凾髢薙〒縲∽ｻｲ髢薙ｒ繧ｵ繝昴・繝医・br/>繧ｹ繧ｭ繝樊凾髢薙ｒ讌ｽ縺励￥豢ｻ逕ｨ
 </p>
           </div>
 
           <div className="grid gap-4">
             <Button onClick={handleLineLogin} variant="line" icon={MessageCircle} className="py-5 text-lg">
-              LINEでログイン
+              LINE縺ｧ繝ｭ繧ｰ繧､繝ｳ
             </Button>
             <Button onClick={handleGoogleLogin} variant="outline" icon={User} className="py-5 text-lg">
-              Googleでログイン
+              Google縺ｧ繝ｭ繧ｰ繧､繝ｳ
             </Button>
             <div className="relative py-4">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-              <div className="relative flex justify-center text-sm"><span className="px-4 bg-[#F8FAFC] text-gray-400">または</span></div>
+              <div className="relative flex justify-center text-sm"><span className="px-4 bg-[#F8FAFC] text-gray-400">縺ｾ縺溘・</span></div>
             </div>
-            <Button onClick={handleGuestLogin} variant="secondary" icon={ArrowRight} className="py-5 text-lg">
-              ゲストとして今すぐ開始
+            <Button onClick={handleGuestLoginSafe} variant="secondary" icon={ArrowRight} className="py-5 text-lg">
+              繧ｲ繧ｹ繝医→縺励※莉翫☆縺宣幕蟋・
             </Button>
           </div>
 
           <p className="text-sm text-gray-400">
-            ログインすることで、<a href="#" className="underline">利用規約</a>と<a href="#" className="underline">プライバシーポリシー</a>に同意したことになります。
+            繝ｭ繧ｰ繧､繝ｳ縺吶ｋ縺薙→縺ｧ縲・a href="#" className="underline">蛻ｩ逕ｨ隕冗ｴ・/a>縺ｨ<a href="#" className="underline">繝励Λ繧､繝舌す繝ｼ繝昴Μ繧ｷ繝ｼ</a>縺ｫ蜷梧э縺励◆縺薙→縺ｫ縺ｪ繧翫∪縺吶・
           </p>
         </motion.div>
       </div>
@@ -701,13 +839,13 @@ export default function App() {
               className="w-28 shrink-0 drop-shadow-[0_18px_32px_rgba(37,99,235,0.14)]"
             />
             <div>
-              <h1 className="text-3xl font-black tracking-tight">{publicUser.name}さんの予定</h1>
-              <p className="text-gray-500 font-medium">空き時間を確認して依頼を送りましょう</p>
+              <h1 className="text-3xl font-black tracking-tight">{publicUser.name}縺輔ｓ縺ｮ莠亥ｮ・/h1>
+              <p className="text-gray-500 font-medium">遨ｺ縺肴凾髢薙ｒ遒ｺ隱阪＠縺ｦ萓晞ｼ繧帝√ｊ縺ｾ縺励ｇ縺・/p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-xl font-black">公開中の空き時間</h3>
+            <h3 className="text-xl font-black">蜈ｬ髢倶ｸｭ縺ｮ遨ｺ縺肴凾髢・/h3>
             <div className="grid gap-4">
               {availabilities.length > 0 ? (
                 availabilities.map(a => (
@@ -717,28 +855,28 @@ export default function App() {
                         <Clock size={24} />
                       </div>
                       <div>
-                        <p className="text-lg font-bold">{format(parseISO(a.date), "M月d日 (E)", { locale: ja })}</p>
+                        <p className="text-lg font-bold">{format(parseISO(a.date), "M譛・譌･ (E)", { locale: ja })}</p>
                         <p className="text-2xl font-black">{a.start_time} - {a.end_time}</p>
                       </div>
                     </div>
                     {isLoggedIn ? (
-                      <Button onClick={() => handleSendRequest(a)} variant="outline">依頼する</Button>
+                      <Button onClick={() => handleSendRequest(a)} variant="outline">萓晞ｼ縺吶ｋ</Button>
                     ) : (
-                      <Button onClick={() => alert("依頼を送るにはログインが必要です。")} variant="outline">依頼する</Button>
+                      <Button onClick={() => alert("萓晞ｼ繧帝√ｋ縺ｫ縺ｯ繝ｭ繧ｰ繧､繝ｳ縺悟ｿ・ｦ√〒縺吶・)} variant="outline">萓晞ｼ縺吶ｋ</Button>
                     )}
                   </Card>
                 ))
               ) : (
                 <div className="py-12 text-center bg-white rounded-3xl border border-dashed border-gray-200 text-gray-400 font-bold">
-                  公開中の予定はありません
+                  蜈ｬ髢倶ｸｭ縺ｮ莠亥ｮ壹・縺ゅｊ縺ｾ縺帙ｓ
                 </div>
               )}
             </div>
           </div>
 
           <div className="pt-8 border-t border-gray-100 text-center">
-            <p className="text-gray-400 mb-4 font-medium">あなたもChoiCrewで予定を管理しませんか？</p>
-            <Button onClick={() => window.location.href = window.location.origin} variant="primary">自分も使ってみる</Button>
+            <p className="text-gray-400 mb-4 font-medium">縺ゅ↑縺溘ｂChoiCrew縺ｧ莠亥ｮ壹ｒ邂｡逅・＠縺ｾ縺帙ｓ縺具ｼ・/p>
+            <Button onClick={() => window.location.href = window.location.origin} variant="primary">閾ｪ蛻・ｂ菴ｿ縺｣縺ｦ縺ｿ繧・/Button>
           </div>
         </div>
       </div>
@@ -759,9 +897,9 @@ export default function App() {
 
         <nav className="space-y-2 flex-1">
           {[
-            { id: "dashboard", label: "ダッシュボード", icon: LayoutDashboard },
-            { id: "calendar", label: "カレンダー", icon: CalendarDays },
-            { id: "settings", label: "設定", icon: Settings },
+            { id: "dashboard", label: "繝繝・す繝･繝懊・繝・, icon: LayoutDashboard },
+            { id: "calendar", label: "繧ｫ繝ｬ繝ｳ繝繝ｼ", icon: CalendarDays },
+            { id: "settings", label: "險ｭ螳・, icon: Settings },
           ].map(item => (
             <button
               key={item.id}
@@ -784,11 +922,11 @@ export default function App() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-bold truncate">{currentUser?.name}</p>
-              <p className="text-xs text-gray-400 truncate">{currentUser?.email || "ゲストユーザー"}</p>
+              <p className="text-xs text-gray-400 truncate">{accountLabel}</p>
             </div>
           </div>
           <Button onClick={() => signOut(auth)} variant="danger" className="w-full" icon={LogOut}>
-            ログアウト
+            繝ｭ繧ｰ繧｢繧ｦ繝・
           </Button>
         </div>
       </aside>
@@ -802,13 +940,13 @@ export default function App() {
               {view === "dashboard" ? "Overview" : view === "calendar" ? "Schedule" : "Preferences"}
             </h2>
             <h1 className="text-3xl font-black tracking-tight">
-              {view === "dashboard" ? "こんにちは！" : view === "calendar" ? "カレンダー" : "設定"}
+              {view === "dashboard" ? "縺薙ｓ縺ｫ縺｡縺ｯ・・ : view === "calendar" ? "繧ｫ繝ｬ繝ｳ繝繝ｼ" : "險ｭ螳・}
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 relative">
             <button 
-              onClick={() => setShowBellDropdown(!showBellDropdown)}
+              onClick={handleOpenNotifications}
               className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-50 relative"
             >
               <Bell size={20} />
@@ -816,8 +954,26 @@ export default function App() {
                 <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
               )}
             </button>
-            <Button onClick={() => setShowAddModal(true)} icon={Plus} className="hidden sm:flex">
-              予定を追加
+            {showBellDropdown && (
+              <div className="absolute right-6 top-24 z-20 w-[min(90vw,24rem)] bg-white rounded-3xl shadow-2xl border border-gray-100 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-black text-lg">通知</p>
+                  <span className="text-xs text-gray-400">{notifications.length}件</span>
+                </div>
+                <div className="max-h-80 overflow-y-auto space-y-2">
+                  {notifications.length > 0 ? notifications.map(notification => (
+                    <div key={notification.id} className={`p-4 rounded-2xl border ${notification.read ? "bg-gray-50 border-gray-100" : "bg-blue-50 border-blue-100"}`}>
+                      <p className="text-sm font-bold">{notification.message}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">{notification.type}</p>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-gray-400 p-4 text-center">通知はまだありません</p>
+                  )}
+                </div>
+              </div>
+            )}
+            <Button onClick={() => openAvailabilityModal()} icon={Plus} className="hidden sm:flex">
+              莠亥ｮ壹ｒ霑ｽ蜉
             </Button>
           </div>
         </header>
@@ -840,11 +996,16 @@ export default function App() {
                         <Share2 size={24} />
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold">予定を共有</h3>
-                        <p className="text-blue-100 text-sm">リンクを送るだけで調整完了</p>
+                        <h3 className="text-xl font-bold">空き情報を共有</h3>
+                        <p className="text-blue-100 text-sm">空き情報を共有する場合はこちらをコピーして共有してください</p>
                       </div>
+                      <input
+                        readOnly
+                        value={shareLink}
+                        className="w-full px-4 py-3 rounded-2xl bg-white/95 text-blue-700 text-sm font-mono border border-white/30 outline-none"
+                      />
                       <Button onClick={copyShareLink} variant="secondary" className="w-full bg-white text-blue-600">
-                        リンクをコピー
+                        共有リンクをコピー
                       </Button>
                     </div>
                     <Share2 size={120} className="absolute -right-8 -bottom-8 text-white/10 group-hover:scale-110 transition-transform" />
@@ -855,10 +1016,10 @@ export default function App() {
                       <Check size={24} />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold">確定済み</h3>
-                      <p className="text-gray-400 text-sm">今週の確定シフト</p>
+                      <h3 className="text-xl font-bold">遒ｺ螳壽ｸ医∩</h3>
+                      <p className="text-gray-400 text-sm">莉企ｱ縺ｮ遒ｺ螳壹す繝輔ヨ</p>
                     </div>
-                    <p className="text-4xl font-black">{availabilities.filter(a => a.status === "confirmed").length}<span className="text-lg font-bold ml-1">件</span></p>
+                    <p className="text-4xl font-black">{availabilities.filter(a => a.status === "confirmed").length}<span className="text-lg font-bold ml-1">莉ｶ</span></p>
                   </Card>
 
                   <Card className="p-8 space-y-4">
@@ -866,10 +1027,10 @@ export default function App() {
                       <Clock size={24} />
                     </div>
                     <div>
-                      <h3 className="text-xl font-bold">リクエスト</h3>
+                      <h3 className="text-xl font-bold">受信リクエスト</h3>
                       <p className="text-gray-400 text-sm">承認待ちの依頼</p>
                     </div>
-                    <p className="text-4xl font-black">{requests.filter(r => r.status === "pending").length}<span className="text-lg font-bold ml-1">件</span></p>
+                    <p className="text-4xl font-black">{incomingRequests.length}<span className="text-lg font-bold ml-1">件</span></p>
                   </Card>
 
                   <Card className="p-8 space-y-4">
@@ -879,28 +1040,64 @@ export default function App() {
                       </div>
                       <button 
                         onClick={async () => {
+                          if (isGuestUser) return;
                           if (!currentUser) return;
                           const newVal = !currentUser.accept_requests;
                           await updateDoc(doc(db, "users", currentUser.uid), { accept_requests: newVal });
                           setCurrentUser({ ...currentUser, accept_requests: newVal });
                         }}
-                        className={`w-12 h-6 rounded-full transition-all relative ${currentUser?.accept_requests ? "bg-blue-600" : "bg-gray-200"}`}
+                        disabled={isGuestUser}
+                        className={`w-12 h-6 rounded-full transition-all relative ${isGuestUser ? "bg-gray-200 opacity-60" : currentUser?.accept_requests ? "bg-blue-600" : "bg-gray-200"}`}
                       >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${currentUser?.accept_requests ? "left-7" : "left-1"}`} />
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isGuestUser ? "left-1" : currentUser?.accept_requests ? "left-7" : "left-1"}`} />
                       </button>
                     </div>
                     <div>
                       <h3 className="text-xl font-bold">依頼受付</h3>
                       <p className="text-gray-400 text-sm">新規リクエストの許可</p>
                     </div>
-                    <p className="text-lg font-black text-gray-700">{currentUser?.accept_requests ? "受付中" : "停止中"}</p>
+                    <p className="text-lg font-black text-gray-700">{isGuestUser ? "ゲストは不可" : currentUser?.accept_requests ? "受付中" : "停止中"}</p>
+                    {isGuestUser && <p className="text-xs text-gray-400">ゲストユーザーは依頼の受信と承認はできません。</p>}
                   </Card>
                 </div>
+
+                {isGuestUser && (
+                  <Card className="p-6 border-amber-100 bg-amber-50/70">
+                    <p className="font-bold text-amber-900">ゲストユーザーは予定の作成・変更・削除のみできます。依頼の受信や承認はクルーでログインしたときに使えます。</p>
+                    <p className="text-sm text-amber-700 mt-2">ログインすると通知センターも使えます。LINE連携済みなら通知が届きます。</p>
+                  </Card>
+                )}
+
+                {incomingRequests.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-2xl font-black tracking-tight">依頼の受信</h3>
+                      <span className="text-sm text-gray-400 font-bold">{incomingRequests.length}件</span>
+                    </div>
+                    <div className="grid gap-4">
+                      {incomingRequests.map(request => (
+                        <Card key={request.id} className="p-6 space-y-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <p className="text-lg font-black">{request.date} {request.start_time}-{request.end_time}</p>
+                              <p className="text-sm text-gray-400 font-medium">{request.manager_name}さんからの依頼</p>
+                            </div>
+                            <span className="px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-xs font-black">承認待ち</span>
+                          </div>
+                          <div className="flex gap-3">
+                            <Button onClick={() => handleApproveRequest(request)} className="flex-1" icon={Check}>承認</Button>
+                            <Button onClick={() => handleRejectRequest(request)} variant="outline" className="flex-1" icon={X}>削除</Button>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Today's Schedule */}
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-2xl font-black tracking-tight">今日の予定</h3>
+                    <h3 className="text-2xl font-black tracking-tight">莉頑律縺ｮ莠亥ｮ・/h3>
                     <div className="flex gap-2">
                       {[0, 1, 2].map(offset => (
                         <button 
@@ -908,7 +1105,7 @@ export default function App() {
                           onClick={() => setDashboardDateOffset(offset)}
                           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${dashboardDateOffset === offset ? "bg-gray-900 text-white" : "bg-white text-gray-400 border border-gray-100"}`}
                         >
-                          {offset === 0 ? "今日" : offset === 1 ? "明日" : format(addDays(new Date(), offset), "M/d")}
+                          {offset === 0 ? "莉頑律" : offset === 1 ? "譏取律" : format(addDays(new Date(), offset), "M/d")}
                         </button>
                       ))}
                     </div>
@@ -939,7 +1136,7 @@ export default function App() {
                                       a.status === "busy" ? "bg-red-900" : "bg-blue-500"
                                     }`}></span>
                                     <p className="text-sm font-bold text-gray-400 uppercase tracking-wider">
-                                      {a.status === "open" ? "空き" : a.status === "pending" ? "リクエスト中" : a.status === "confirmed" ? "確定" : "予定あり"}
+                                      {a.status === "open" ? "遨ｺ縺・ : a.status === "pending" ? "繝ｪ繧ｯ繧ｨ繧ｹ繝井ｸｭ" : a.status === "confirmed" ? "遒ｺ螳・ : "莠亥ｮ壹≠繧・}
                                     </p>
                                     {a.note && <span className="text-xs text-gray-300 font-medium ml-2">| {a.note}</span>}
                                   </div>
@@ -955,8 +1152,8 @@ export default function App() {
                           <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto text-gray-300">
                             <Calendar size={32} />
                           </div>
-                          <p className="text-gray-400 font-bold">予定がありません</p>
-                          <Button onClick={() => setShowAddModal(true)} variant="outline" icon={Plus}>予定を追加する</Button>
+                          <p className="text-gray-400 font-bold">莠亥ｮ壹′縺ゅｊ縺ｾ縺帙ｓ</p>
+                          <Button onClick={() => openAvailabilityModal()} variant="outline" icon={Plus}>莠亥ｮ壹ｒ霑ｽ蜉縺吶ｋ</Button>
                         </div>
                       )}
                   </div>
@@ -974,7 +1171,7 @@ export default function App() {
               >
                 <Card className="lg:col-span-8 p-8">
                   <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-2xl font-black">{format(selectedDate, "yyyy年 M月", { locale: ja })}</h3>
+                    <h3 className="text-2xl font-black">{format(selectedDate, "yyyy蟷ｴ M譛・, { locale: ja })}</h3>
                     <div className="flex gap-2">
                       <button onClick={() => setSelectedDate(addDays(selectedDate, -7))} className="p-3 rounded-xl hover:bg-gray-100"><ChevronLeft size={20}/></button>
                       <button onClick={() => setSelectedDate(addDays(selectedDate, 7))} className="p-3 rounded-xl hover:bg-gray-100"><ChevronRight size={20}/></button>
@@ -982,7 +1179,7 @@ export default function App() {
                   </div>
                   
                   <div className="grid grid-cols-7 gap-2 sm:gap-4">
-                    {["日", "月", "火", "水", "木", "金", "土"].map(d => (
+                    {["譌･", "譛・, "轣ｫ", "豌ｴ", "譛ｨ", "驥・, "蝨・].map(d => (
                       <div key={d} className="text-center text-xs font-black text-gray-400 uppercase pb-4">{d}</div>
                     ))}
                     {eachDayOfInterval({
@@ -1002,16 +1199,16 @@ export default function App() {
                         const hasBusy = dayAvails.some(a => a.status === "busy");
                         
                         if (hasConfirmed) {
-                          chipText = "確定";
+                          chipText = "遒ｺ螳・;
                           chipColor = "bg-red-500";
                         } else if (hasPending) {
-                          chipText = "依頼中";
+                          chipText = "萓晞ｼ荳ｭ";
                           chipColor = "bg-orange-500";
                         } else if (hasBusy) {
-                          chipText = "予定有";
+                          chipText = "莠亥ｮ壽怏";
                           chipColor = "bg-red-900";
                         } else {
-                          chipText = "空き";
+                          chipText = "遨ｺ縺・;
                           chipColor = "bg-gray-400";
                         }
                       }
@@ -1036,8 +1233,8 @@ export default function App() {
 
                 <div className="lg:col-span-4 space-y-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-black">{format(selectedDate, "M/d (E)", { locale: ja })}の予定</h3>
-                    <Button onClick={() => setShowAddModal(true)} variant="outline" icon={Plus} className="p-2 h-10 w-10 rounded-full" />
+                    <h3 className="text-xl font-black">{format(selectedDate, "M/d (E)", { locale: ja })}縺ｮ莠亥ｮ・/h3>
+                    <Button onClick={() => openAvailabilityModal()} variant="outline" icon={Plus} className="p-2 h-10 w-10 rounded-full" />
                   </div>
                   
                   <div className="space-y-4">
@@ -1057,9 +1254,19 @@ export default function App() {
                                   }`}></div>
                                   <p className="text-lg font-black">{a.start_time} - {a.end_time}</p>
                                 </div>
-                                <button onClick={() => handleDeleteAvailability(a.id)} className="text-gray-300 hover:text-red-500 transition-colors">
-                                  <Trash2 size={16} />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => openAvailabilityModal(a)} className="text-gray-300 hover:text-blue-500 transition-colors">
+                                    <Pencil size={16} />
+                                  </button>
+                                <div className="flex items-center gap-2">
+                                  <button onClick={() => openAvailabilityModal(a)} className="text-gray-300 hover:text-blue-500 transition-colors">
+                                    <Pencil size={16} />
+                                  </button>
+                                  <button onClick={() => handleDeleteAvailability(a.id)} className="text-gray-300 hover:text-red-500 transition-colors">
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </div>
                               </div>
                               {a.note && <p className="text-sm text-gray-500 font-medium">{a.note}</p>}
                               <div className="flex items-center justify-between pt-2 border-t border-gray-50">
@@ -1068,14 +1275,14 @@ export default function App() {
                                   a.status === "pending" ? "text-orange-500" : 
                                   a.status === "busy" ? "text-red-900" : "text-gray-400"
                                 }`}>
-                                  {a.status === "open" ? "空き" : a.status === "pending" ? "リクエスト中" : a.status === "confirmed" ? "確定" : "予定あり"}
+                                  {a.status === "open" ? "遨ｺ縺・ : a.status === "pending" ? "繝ｪ繧ｯ繧ｨ繧ｹ繝井ｸｭ" : a.status === "confirmed" ? "遒ｺ螳・ : "莠亥ｮ壹≠繧・}
                                 </span>
                               </div>
                             </Card>
                           ))
                       ) : (
                         <div className="py-12 text-center space-y-4 bg-white rounded-3xl border border-dashed border-gray-200">
-                          <p className="text-gray-400 font-bold">予定がありません</p>
+                          <p className="text-gray-400 font-bold">莠亥ｮ壹′縺ゅｊ縺ｾ縺帙ｓ</p>
                         </div>
                       )}
                   </div>
@@ -1095,7 +1302,7 @@ export default function App() {
                   <section className="space-y-6">
                     <h3 className="text-xl font-black flex items-center gap-3">
                       <User size={24} className="text-blue-600" />
-                      プロフィール
+                      繝励Ο繝輔ぅ繝ｼ繝ｫ
                     </h3>
                     <div className="flex items-center gap-6">
                       <div className="w-20 h-20 bg-gray-100 rounded-3xl overflow-hidden">
@@ -1116,15 +1323,16 @@ export default function App() {
                               if (!currentUser) return;
                               await updateDoc(doc(db, "users", currentUser.uid), { name: newName });
                               setIsEditingName(false);
-                            }} icon={Check}>保存</Button>
+                            }} icon={Check}>菫晏ｭ・/Button>
                           </div>
                         ) : (
                           <div className="flex items-center justify-between">
                             <p className="text-2xl font-black">{currentUser?.name}</p>
-                            <Button onClick={() => setIsEditingName(true)} variant="ghost">編集</Button>
+                            <Button onClick={() => setIsEditingName(true)} variant="ghost">邱ｨ髮・/Button>
                           </div>
                         )}
-                        <p className="text-gray-400 font-medium">{currentUser?.email || "ゲストユーザー"}</p>
+                        <p className="text-gray-400 font-medium">{accountLabel}</p>
+                        <p className="text-xs text-blue-600 font-semibold">ログイン中は通知センターが使えます。LINE連携でプッシュ通知も届きます。</p>
                       </div>
                     </div>
                   </section>
@@ -1132,13 +1340,13 @@ export default function App() {
                   <section className="space-y-6 pt-8 border-t border-gray-100">
                     <h3 className="text-xl font-black flex items-center gap-3">
                       <Users size={24} className="text-blue-600" />
-                      コネクション
+                      繧ｳ繝阪け繧ｷ繝ｧ繝ｳ
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {connections.length > 0 ? (
-                        <p className="text-gray-600 font-bold">{connections.length}件のコネクションがあります</p>
+                        <p className="text-gray-600 font-bold">{connections.length}莉ｶ縺ｮ繧ｳ繝阪け繧ｷ繝ｧ繝ｳ縺後≠繧翫∪縺・/p>
                       ) : (
-                        <p className="text-gray-400 text-sm italic">コネクションはありません</p>
+                        <p className="text-gray-400 text-sm italic">繧ｳ繝阪け繧ｷ繝ｧ繝ｳ縺ｯ縺ゅｊ縺ｾ縺帙ｓ</p>
                       )}
                     </div>
                   </section>
@@ -1146,7 +1354,7 @@ export default function App() {
                   <section className="space-y-6 pt-8 border-t border-gray-100">
                     <h3 className="text-xl font-black flex items-center gap-3">
                       <Clock size={24} className="text-blue-600" />
-                      時間プリセット
+                      譎る俣繝励Μ繧ｻ繝・ヨ
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {presets.length > 0 ? (
@@ -1159,7 +1367,7 @@ export default function App() {
                           </div>
                         ))
                       ) : (
-                        <p className="text-gray-400 text-sm italic">登録されているプリセットはありません</p>
+                        <p className="text-gray-400 text-sm italic">逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ繝励Μ繧ｻ繝・ヨ縺ｯ縺ゅｊ縺ｾ縺帙ｓ</p>
                       )}
                     </div>
                   </section>
@@ -1167,7 +1375,7 @@ export default function App() {
                   <section className="space-y-6 pt-8 border-t border-gray-100">
                     <h3 className="text-xl font-black flex items-center gap-3">
                       <MessageCircle size={24} className="text-[#06C755]" />
-                      LINE連携
+                      LINE騾｣謳ｺ
                     </h3>
                     {currentUser?.line_user_id ? (
                       <div className="bg-emerald-50 p-6 rounded-3xl flex items-center justify-between">
@@ -1176,17 +1384,17 @@ export default function App() {
                             <Check size={24} />
                           </div>
                           <div>
-                            <p className="font-bold text-emerald-900">連携済み</p>
-                            <p className="text-sm text-emerald-700">LINEで通知を受け取れます</p>
+                            <p className="font-bold text-emerald-900">騾｣謳ｺ貂医∩</p>
+                            <p className="text-sm text-emerald-700">LINE縺ｧ騾夂衍繧貞女縺大叙繧後∪縺・/p>
                           </div>
                         </div>
-                        <Button variant="ghost" className="text-emerald-600">解除</Button>
+                        <Button variant="ghost" className="text-emerald-600">隗｣髯､</Button>
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        <p className="text-gray-500">LINEと連携すると、シフトのリクエストや承認をリアルタイムで受け取ることができます。</p>
+                        <p className="text-gray-500">LINE縺ｨ騾｣謳ｺ縺吶ｋ縺ｨ縲√す繝輔ヨ縺ｮ繝ｪ繧ｯ繧ｨ繧ｹ繝医ｄ謇ｿ隱阪ｒ繝ｪ繧｢繝ｫ繧ｿ繧､繝縺ｧ蜿励￠蜿悶ｋ縺薙→縺後〒縺阪∪縺吶・/p>
                         <Button onClick={handleLineLogin} variant="line" icon={MessageCircle} className="w-full">
-                          LINEと連携する
+                          LINE縺ｨ騾｣謳ｺ縺吶ｋ
                         </Button>
                       </div>
                     )}
@@ -1210,7 +1418,7 @@ export default function App() {
           <button
             key={item.id}
             onClick={() => {
-              if (item.id === "add") setShowAddModal(true);
+              if (item.id === "add") openAvailabilityModal();
               else if (item.id === "share") copyShareLink();
               else setView(item.id as "dashboard" | "calendar" | "settings");
             }}
@@ -1225,14 +1433,14 @@ export default function App() {
       <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowAddModal(false)}
+              onClick={closeAvailabilityModal}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ y: "100%", opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "100%", opacity: 0 }}
@@ -1241,17 +1449,19 @@ export default function App() {
             >
               <div className="w-12 h-1.5 bg-gray-100 rounded-full mx-auto mb-6 sm:hidden" />
               <div className="flex items-center justify-between mb-8">
-                <h3 className="text-2xl font-black tracking-tight">予定を追加</h3>
-                <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X/></button>
+                <h3 className="text-2xl font-black tracking-tight">{editingAvailability ? "予定を編集" : "予定を追加"}</h3>
+                <button onClick={closeAvailabilityModal} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X/></button>
               </div>
 
               <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">日付</label>
-                  <div className="p-4 bg-gray-50 rounded-2xl flex items-center justify-between">
-                    <span className="font-bold">{format(selectedDate, "yyyy/MM/dd (E)", { locale: ja })}</span>
-                    <Calendar size={18} className="text-gray-300" />
-                  </div>
+                  <input
+                    type="date"
+                    value={newAvailDate}
+                    onChange={e => setNewAvailDate(e.target.value)}
+                    className="w-full p-4 bg-gray-50 rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -1278,28 +1488,42 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">開始</label>
-                    <input 
-                      type="time" 
+                    <input
+                      type="time"
                       value={newAvailTime.start}
-                      onChange={e => setNewAvailTime({...newAvailTime, start: e.target.value})}
+                      onChange={e => setNewAvailTime({ ...newAvailTime, start: e.target.value })}
                       className="w-full p-4 bg-gray-50 rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">終了</label>
-                    <input 
-                      type="time" 
+                    <input
+                      type="time"
                       value={newAvailTime.end}
-                      onChange={e => setNewAvailTime({...newAvailTime, end: e.target.value})}
+                      onChange={e => setNewAvailTime({ ...newAvailTime, end: e.target.value })}
                       className="w-full p-4 bg-gray-50 rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">状態</label>
+                  <select
+                    value={newAvailStatus}
+                    onChange={e => setNewAvailStatus(e.target.value as Availability["status"])}
+                    className="w-full p-4 bg-gray-50 rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="open">空き</option>
+                    <option value="pending">依頼中</option>
+                    <option value="confirmed">確定</option>
+                    <option value="busy">予定あり</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">予定名 (任意)</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="例: 授業、サークルなど"
                     value={newAvailNote}
                     onChange={e => setNewAvailNote(e.target.value)}
@@ -1308,20 +1532,20 @@ export default function App() {
                 </div>
 
                 <div className="flex gap-3 pt-4">
-                  <Button 
-                    onClick={() => handleAddAvailability("open")} 
-                    className="flex-1 py-4 font-black" 
+                  <Button
+                    onClick={handleSaveAvailability}
+                    className="flex-1 py-4 font-black"
                     disabled={isSaving}
                   >
-                    空きとして登録
+                    {editingAvailability ? "保存する" : "予定を登録"}
                   </Button>
-                  <Button 
-                    onClick={() => handleAddAvailability("busy")} 
+                  <Button
+                    onClick={closeAvailabilityModal}
                     variant="outline"
-                    className="flex-1 py-4 font-black border-red-100 text-red-500 hover:bg-red-50" 
+                    className="flex-1 py-4 font-black"
                     disabled={isSaving}
                   >
-                    予定あり(不可)
+                    キャンセル
                   </Button>
                 </div>
               </div>
@@ -1332,3 +1556,5 @@ export default function App() {
     </div>
   );
 }
+
+
