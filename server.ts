@@ -38,7 +38,7 @@ app.get("/api/health", (req, res) => {
 app.get("/api/auth/line/url", (req, res) => {
   const clientId = process.env.LINE_CLIENT_ID;
   const clientSecret = process.env.LINE_CLIENT_SECRET;
-  const appUrl = process.env.APP_URL;
+  const appUrl = (process.env.APP_URL || "").replace(/\/$/, ""); // Normalize: remove trailing slash
 
   if (!clientId || !clientSecret || !appUrl) {
     console.error("Environment variables missing:", { clientId: !!clientId, clientSecret: !!clientSecret, appUrl: !!appUrl });
@@ -66,21 +66,30 @@ app.get("/api/auth/line/callback", async (req, res) => {
   const clientId = process.env.LINE_CLIENT_ID;
   const clientSecret = process.env.LINE_CLIENT_SECRET;
   
-  const baseUrl = process.env.APP_URL;
+  const baseUrl = (process.env.APP_URL || "").replace(/\/$/, ""); // Normalize: remove trailing slash
   const redirectUri = `${baseUrl}/api/auth/line/callback`;
 
+  console.log("LINE Callback received:", { code: !!code, redirectUri });
+
   try {
+    if (!code) throw new Error("No code received from LINE");
+    if (!clientId || !clientSecret) throw new Error("LINE_CLIENT_ID or LINE_CLIENT_SECRET is missing");
+
+    const params = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: code as string,
+      redirect_uri: redirectUri,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    console.log("Requesting token from LINE...");
     const tokenResponse = await axios.post("https://api.line.me/oauth2/v2.1/token", 
-      new URLSearchParams({
-        grant_type: "authorization_code",
-        code: code as string,
-        redirect_uri: redirectUri,
-        client_id: clientId!,
-        client_secret: clientSecret!,
-      }).toString(),
+      params.toString(),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
+    console.log("Token received, fetching profile...");
     const profileResponse = await axios.get("https://api.line.me/v2/profile", {
       headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` }
     });
@@ -106,8 +115,18 @@ app.get("/api/auth/line/callback", async (req, res) => {
       </html>
     `);
   } catch (error: any) {
-    console.error("LINE Auth Error:", error.response?.data || error.message);
-    res.status(500).send("Authentication failed");
+    const errorData = error.response?.data || { message: error.message };
+    console.error("LINE Auth Error Details:", JSON.stringify(errorData));
+    res.status(500).send(`
+      <html>
+        <body>
+          <h1>Authentication failed</h1>
+          <p>Error: ${errorData.error || "unknown"}</p>
+          <p>Description: ${errorData.error_description || errorData.message || "No details provided"}</p>
+          <button onclick="window.close()">Close</button>
+        </body>
+      </html>
+    `);
   }
 });
 
