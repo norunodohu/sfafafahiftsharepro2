@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback, useRef } from "react";
 import { 
   Calendar, 
   Clock, 
@@ -18,7 +18,9 @@ import {
   LayoutDashboard,
   CalendarDays,
   ArrowRight,
-  Pencil
+  Pencil,
+  Eye,
+  Link2
 } from "lucide-react";
 import { 
   initializeApp 
@@ -50,7 +52,7 @@ import {
   limit,
   writeBatch
 } from "firebase/firestore";
-import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
+import { format, addDays, addMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -134,6 +136,7 @@ interface UserProfile {
   notification_pref?: "none" | "email" | "line" | "both";
   line_user_id?: string;
   line_picture?: string;
+  avatar_url?: string;
   default_start?: string;
   default_end?: string;
 }
@@ -191,8 +194,21 @@ interface Preset {
 }
 
 // Components
-const Card = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
-  <div className={`bg-white/80 backdrop-blur-xl border border-white/20 rounded-3xl shadow-sm ${className}`}>
+const Card = ({
+  children,
+  className = "",
+  onClick,
+  interactive = false,
+}: {
+  children: React.ReactNode,
+  className?: string,
+  onClick?: () => void,
+  interactive?: boolean
+}) => (
+  <div
+    onClick={onClick}
+    className={`bg-white/80 backdrop-blur-xl border border-white/20 rounded-3xl shadow-sm ${className} ${interactive ? "cursor-pointer transition-transform hover:-translate-y-0.5" : ""}`}
+  >
     {children}
   </div>
 );
@@ -246,6 +262,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionUsers, setConnectionUsers] = useState<UserProfile[]>([]);
   
   const [view, setView] = useState<"dashboard" | "calendar" | "settings">("dashboard");
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -261,13 +278,29 @@ export default function App() {
   const [newAvailTime, setNewAvailTime] = useState({ start: "10:00", end: "15:00" });
   const [newAvailNote, setNewAvailNote] = useState("");
   const [newAvailStatus, setNewAvailStatus] = useState<Availability["status"]>("open");
+  const [newAvatarUrl, setNewAvatarUrl] = useState("");
+  const [showPastCalendarItems, setShowPastCalendarItems] = useState(false);
+
+  const requestSectionRef = useRef<HTMLDivElement | null>(null);
+  const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
 
   const isGuestUser = !currentUser?.email && !currentUser?.line_user_id;
   const accountLabel = isGuestUser ? "ゲストユーザー" : "クルー";
   const shareLink = currentUser ? `${window.location.origin}?share=${currentUser.share_token}` : "";
+  const avatarSrc = currentUser?.avatar_url || currentUser?.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name || "choicrew"}`;
+  const isOwnPreview = isPublicView && Boolean(currentUser?.uid && publicUser?.uid && currentUser.uid === publicUser.uid);
   const incomingRequests = currentUser
     ? requests.filter(r => r.staff_id === currentUser.uid && r.status === "pending")
     : [];
+  const confirmedAvailabilities = availabilities
+    .filter(a => a.status === "confirmed")
+    .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
+  const monthlyAvailabilities = availabilities
+    .filter(a => {
+      const d = parseISO(a.date);
+      return d.getFullYear() === selectedDate.getFullYear() && d.getMonth() === selectedDate.getMonth();
+    })
+    .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const openAvailabilityModal = (availability?: Availability) => {
     if (availability) {
       setEditingAvailability(availability);
@@ -312,6 +345,11 @@ export default function App() {
       throw new Error("LINE notification failed");
     }
   };
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setNewAvatarUrl(currentUser.avatar_url || currentUser.line_picture || "");
+  }, [currentUser?.uid, currentUser?.avatar_url, currentUser?.line_picture]);
   
   useEffect(() => {
     const handleResize = () => {}; // No longer needed for isDesktop
@@ -376,6 +414,7 @@ export default function App() {
           name: profile.displayName || existingData.name,
           line_user_id: profile.userId,
           line_picture: profile.pictureUrl,
+          avatar_url: existingData.avatar_url,
           notification_pref: "line"
         };
         await updateDoc(doc(db, "users", firebaseUser.uid), {
@@ -397,6 +436,7 @@ export default function App() {
           accept_requests: true,
           line_user_id: profile.userId,
           line_picture: profile.pictureUrl,
+          avatar_url: "",
           notification_pref: "line"
         };
         await setDoc(doc(db, "users", firebaseUser.uid), newProfile);
@@ -426,7 +466,8 @@ export default function App() {
               role: "staff",
               current_role: "staff",
               share_token: Math.random().toString(36).substring(2, 15),
-              accept_requests: !user.isAnonymous
+              accept_requests: !user.isAnonymous,
+              avatar_url: ""
             };
             await setDoc(doc(db, "users", user.uid), newProfile);
             userDoc = await getDoc(doc(db, "users", user.uid));
@@ -565,6 +606,42 @@ export default function App() {
     };
   }, [currentUser?.uid]);
 
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setConnectionUsers([]);
+      return;
+    }
+
+    const peerIds = Array.from(new Set(
+      connections
+        .map(conn => [conn.user1_id, conn.user2_id].find(id => id !== currentUser.uid))
+        .filter((id): id is string => Boolean(id))
+    ));
+
+    Promise.all(peerIds.map(async (peerId) => {
+      const snap = await getDoc(doc(db, "users", peerId));
+      return snap.exists() ? (snap.data() as UserProfile) : null;
+    })).then(users => {
+      setConnectionUsers(users.filter((u): u is UserProfile => Boolean(u)));
+    }).catch(err => {
+      console.error("Failed to load connection users:", err);
+    });
+  }, [currentUser?.uid, connections]);
+
+  useEffect(() => {
+    if (!isPublicView || !currentUser?.uid || !publicUser?.uid) return;
+    if (currentUser.uid === publicUser.uid) return;
+
+    const pairId = [currentUser.uid, publicUser.uid].sort().join("_");
+    setDoc(doc(db, "connections", pairId), {
+      user1_id: currentUser.uid,
+      user2_id: publicUser.uid,
+      status: "active"
+    }, { merge: true }).catch(err => {
+      console.error("Auto follow failed:", err);
+    });
+  }, [isPublicView, currentUser?.uid, publicUser?.uid]);
+
   // Public View Listeners
   useEffect(() => {
     if (!isPublicView || !publicUser?.uid) return;
@@ -689,7 +766,7 @@ export default function App() {
       await createNotification(
         availability.user_id,
         "request",
-        `${currentUser.name}さんから依頼が届きました。${availability.date} ${availability.start_time}-${availability.end_time}`,
+        `${currentUser.name}さんから依頼が届きました。${availability.date} ${availability.start_time}-${availability.end_time}`, 
         availability.date
       );
 
@@ -732,7 +809,7 @@ export default function App() {
     await createNotification(
       request.manager_id,
       "approval",
-      `${currentUser.name}さんが依頼を承認しました。${request.date} ${request.start_time}-${request.end_time}`,
+      `${currentUser.name}さんが依頼を承認しました。${request.date} ${request.start_time}-${request.end_time}`, 
       request.date
     );
 
@@ -755,7 +832,7 @@ export default function App() {
     await createNotification(
       request.manager_id,
       "decline",
-      `${currentUser.name}さんが依頼を削除しました。${request.date} ${request.start_time}-${request.end_time}`,
+      `${currentUser.name}さんが依頼を削除しました。${request.date} ${request.start_time}-${request.end_time}`, 
       request.date
     );
 
@@ -766,6 +843,70 @@ export default function App() {
       );
     }
     alert("削除しました。");
+  };
+
+  const handleRefreshShareToken = async () => {
+    if (!currentUser) return;
+    const nextToken = Math.random().toString(36).substring(2, 15);
+    await updateDoc(doc(db, "users", currentUser.uid), { share_token: nextToken });
+    setCurrentUser({ ...currentUser, share_token: nextToken });
+    alert("招待URLを更新しました。");
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!currentUser) return;
+    await updateDoc(doc(db, "users", currentUser.uid), { avatar_url: newAvatarUrl.trim() });
+    setCurrentUser({ ...currentUser, avatar_url: newAvatarUrl.trim() });
+    alert("プロフィール画像を更新しました。");
+  };
+
+  const handleCreateTemplateAvailabilities = async (mode: "weekend" | "weekday") => {
+    if (!currentUser) return;
+    const startTime = currentUser.default_start || "09:00";
+    const endTime = currentUser.default_end || "17:00";
+    const today = new Date();
+    const batchDates: string[] = [];
+    for (let i = 0; i < 56; i++) {
+      const date = addDays(today, i);
+      const weekIndex = Math.floor(i / 7);
+      const isAltWeek = weekIndex % 2 === 0;
+      const day = date.getDay();
+      const matches = mode === "weekend"
+        ? (day === 0 || day === 6)
+        : (day >= 1 && day <= 5);
+      if (matches && isAltWeek) {
+        batchDates.push(format(date, "yyyy-MM-dd"));
+      }
+    }
+
+    for (const date of batchDates) {
+      await addDoc(collection(db, "availabilities"), {
+        user_id: currentUser.uid,
+        user_name: currentUser.name,
+        date,
+        start_time: startTime,
+        end_time: endTime,
+        status: "open",
+        note: mode === "weekend" ? "隔週土日テンプレ" : "隔週平日テンプレ",
+        created_at: serverTimestamp()
+      });
+    }
+    alert("テンプレ予定を追加しました。");
+  };
+
+  const handleDeleteOpenAvailabilities = async () => {
+    if (!currentUser) return;
+    const openSnap = await getDocs(
+      query(collection(db, "availabilities"), where("user_id", "==", currentUser.uid), where("status", "==", "open"))
+    );
+    const batch = writeBatch(db);
+    openSnap.docs.forEach(d => batch.delete(doc(db, "availabilities", d.id)));
+    await batch.commit();
+    alert("空き時間をすべて削除しました。");
+  };
+
+  const scrollToSection = (target: React.RefObject<HTMLDivElement | null>) => {
+    target.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const copyShareLink = () => {
@@ -801,7 +942,6 @@ export default function App() {
             />
 <p className="text-xl text-gray-500 font-medium">
 空いた時間で、予定をかんたんに共有できます。スケジュールを見やすく整理して使えます。
-</p>
           </div>
 
           <div className="grid gap-4">
@@ -813,16 +953,14 @@ export default function App() {
             </Button>
             <div className="relative py-4">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-              <div className="relative flex justify-center text-sm"><span className="px-4 bg-[#F8FAFC] text-gray-400">縺ｾ縺溘・</span></div>
+              <div className="relative flex justify-center text-sm"><span className="px-4 bg-[#F8FAFC] text-gray-400">または</span></div>
             </div>
             <Button onClick={handleGuestLoginSafe} variant="secondary" icon={ArrowRight} className="py-5 text-lg">
               ゲストで続ける
-            </Button>
           </div>
 
           <p className="text-sm text-gray-400">
             ログインすることで、利用規約とプライバシーポリシーに同意したことになります。
-          </p>
         </motion.div>
       </div>
     );
@@ -844,6 +982,12 @@ export default function App() {
               </div>
           </div>
 
+          {isOwnPreview && (
+            <Card className="p-4 bg-blue-50 border-blue-100">
+              <p className="font-bold text-blue-700 flex items-center gap-2"><Eye size={16} />ログイン中のあなたのページです。ここはプレビュー表示なので、依頼ボタンは使えません。</p>
+            </Card>
+          )}
+
           <div className="space-y-4">
             <h3 className="text-xl font-black">公開中の空き時間</h3>
             <div className="grid gap-4">
@@ -855,14 +999,16 @@ export default function App() {
                         <Clock size={24} />
                       </div>
                       <div>
-                        <p className="text-lg font-bold">{format(parseISO(a.date), "M譛・譌･ (E)", { locale: ja })}</p>
+                        <p className="text-lg font-bold">{format(parseISO(a.date), "M月d日 (E)", { locale: ja })}</p>
                         <p className="text-2xl font-black">{a.start_time} - {a.end_time}</p>
                       </div>
                     </div>
-                    {isLoggedIn ? (
+                    {isOwnPreview ? (
+                      <Button variant="outline" disabled>プレビュー中</Button>
+                    ) : isLoggedIn ? (
                       <Button onClick={() => handleSendRequest(a)} variant="outline">依頼する</Button>
                     ) : (
-                      <Button onClick={() => alert("依頼を送るにはログインが必要です。")} variant="outline">依頼する</Button>
+                      <Button onClick={() => alert("依頼を送るにはログインが必要です。") } variant="outline">依頼する</Button>
                     )}
                   </Card>
                 ))
@@ -874,10 +1020,12 @@ export default function App() {
             </div>
           </div>
 
-          <div className="pt-8 border-t border-gray-100 text-center">
-            <p className="text-gray-400 mb-4 font-medium">あなたもChoiCrewで予定を管理してみませんか。</p>
-            <Button onClick={() => window.location.href = window.location.origin} variant="primary">自分でも使ってみる</Button>
-          </div>
+          {!isLoggedIn && (
+            <div className="pt-8 border-t border-gray-100 text-center">
+              <p className="text-gray-400 mb-4 font-medium">あなたもChoiCrewで予定を管理してみませんか。</p>
+              <Button onClick={() => window.location.href = window.location.origin} variant="primary">自分でも使ってみる</Button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -899,7 +1047,7 @@ export default function App() {
           {[
             { id: "dashboard", label: "ダッシュボード", icon: LayoutDashboard },
             { id: "calendar", label: "カレンダー", icon: CalendarDays },
-            { id: "settings", label: "設定", icon: Settings },
+            { id: "settings", label: "險ｭ螳・, icon: Settings },
           ].map(item => (
             <button
               key={item.id}
@@ -916,7 +1064,7 @@ export default function App() {
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden">
               <img
-                src={currentUser?.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`}
+                src={avatarSrc}
                 alt="avatar"
               />
             </div>
@@ -927,7 +1075,6 @@ export default function App() {
           </div>
           <Button onClick={() => signOut(auth)} variant="danger" className="w-full" icon={LogOut}>
             ログアウト
-          </Button>
         </div>
       </aside>
 
@@ -997,7 +1144,7 @@ export default function App() {
                       </div>
                       <div>
                         <h3 className="text-xl font-bold">空き情報を共有</h3>
-                        <p className="text-blue-100 text-sm">空き情報を共有する場合はこちらをコピーして共有してください</p>
+                        <p className="text-blue-100 text-sm">このリンクからあなたの予定が共有されます。一度プレビューでご確認ください。</p>
                       </div>
                       <input
                         readOnly
@@ -1007,11 +1154,15 @@ export default function App() {
                       <Button onClick={copyShareLink} variant="secondary" className="w-full bg-white text-blue-600">
                         共有リンクをコピー
                       </Button>
+                      <Button onClick={handleRefreshShareToken} variant="ghost" className="w-full text-white/90 border border-white/20">
+                        <Link2 size={18} />
+                        招待URLを更新
+                      </Button>
                     </div>
                     <Share2 size={120} className="absolute -right-8 -bottom-8 text-white/10 group-hover:scale-110 transition-transform" />
                   </Card>
 
-                  <Card className="p-8 space-y-4">
+                  <Card className="p-8 space-y-4" interactive onClick={() => scrollToSection(confirmedSectionRef)}>
                     <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
                       <Check size={24} />
                     </div>
@@ -1022,7 +1173,7 @@ export default function App() {
                       <p className="text-4xl font-black">{availabilities.filter(a => a.status === "confirmed").length}<span className="text-lg font-bold ml-1">件</span></p>
                   </Card>
 
-                  <Card className="p-8 space-y-4">
+                  <Card className="p-8 space-y-4" interactive onClick={() => scrollToSection(requestSectionRef)}>
                     <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center">
                       <Clock size={24} />
                     </div>
@@ -1069,9 +1220,9 @@ export default function App() {
                 )}
 
                 {incomingRequests.length > 0 && (
-                  <div className="space-y-4">
+                  <div className="space-y-4" ref={requestSectionRef}>
                     <div className="flex items-center justify-between">
-                      <h3 className="text-2xl font-black tracking-tight">依頼の受信</h3>
+                      依頼の受信
                       <span className="text-sm text-gray-400 font-bold">{incomingRequests.length}件</span>
                     </div>
                     <div className="grid gap-4">
@@ -1105,7 +1256,7 @@ export default function App() {
                           onClick={() => setDashboardDateOffset(offset)}
                           className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${dashboardDateOffset === offset ? "bg-gray-900 text-white" : "bg-white text-gray-400 border border-gray-100"}`}
                         >
-                          {offset === 0 ? "莉頑律" : offset === 1 ? "譏取律" : format(addDays(new Date(), offset), "M/d")}
+                          {offset === 0 ? "今日" : offset === 1 ? "明日" : format(addDays(new Date(), offset), "M/d")}
                         </button>
                       ))}
                     </div>
@@ -1136,7 +1287,7 @@ export default function App() {
                                       a.status === "busy" ? "bg-red-900" : "bg-blue-500"
                                     }`}></span>
                                   <p className="text-sm font-bold text-gray-400 uppercase tracking-wider">
-                                    {a.status === "open" ? "空き" : a.status === "pending" ? "リクエスト中" : a.status === "confirmed" ? "確定" : "予定あり"}
+                                    {a.status === "open" ? "空き" : a.status === "pending" ? "依頼中" : a.status === "confirmed" ? "確定" : "予定あり"}
                                   </p>
                                     {a.note && <span className="text-xs text-gray-300 font-medium ml-2">| {a.note}</span>}
                                   </div>
@@ -1173,8 +1324,8 @@ export default function App() {
                   <div className="flex items-center justify-between mb-8">
                     <h3 className="text-2xl font-black">{format(selectedDate, "yyyy年 M月", { locale: ja })}</h3>
                     <div className="flex gap-2">
-                      <button onClick={() => setSelectedDate(addDays(selectedDate, -7))} className="p-3 rounded-xl hover:bg-gray-100"><ChevronLeft size={20}/></button>
-                      <button onClick={() => setSelectedDate(addDays(selectedDate, 7))} className="p-3 rounded-xl hover:bg-gray-100"><ChevronRight size={20}/></button>
+                      <button onClick={() => setSelectedDate(addMonths(selectedDate, -1))} className="p-3 rounded-xl hover:bg-gray-100"><ChevronLeft size={20}/></button>
+                      <button onClick={() => setSelectedDate(addMonths(selectedDate, 1))} className="p-3 rounded-xl hover:bg-gray-100"><ChevronRight size={20}/></button>
                     </div>
                   </div>
                   
@@ -1183,8 +1334,8 @@ export default function App() {
                       <div key={d} className="text-center text-xs font-black text-gray-400 uppercase pb-4">{d}</div>
                     ))}
                     {eachDayOfInterval({
-                      start: startOfWeek(selectedDate),
-                      end: endOfWeek(selectedDate)
+                      start: startOfMonth(selectedDate),
+                      end: endOfMonth(selectedDate)
                     }).map(day => {
                       const dayAvails = availabilities.filter(a => isSameDay(parseISO(a.date), day));
                       const isSelected = isSameDay(day, selectedDate);
@@ -1205,7 +1356,7 @@ export default function App() {
                             chipText = "依頼中";
                             chipColor = "bg-orange-500";
                           } else if (hasBusy) {
-                            chipText = "予定有";
+                            chipText = "予定あり";
                             chipColor = "bg-red-900";
                           } else {
                             chipText = "空き";
@@ -1258,15 +1409,10 @@ export default function App() {
                                   <button onClick={() => openAvailabilityModal(a)} className="text-gray-300 hover:text-blue-500 transition-colors">
                                     <Pencil size={16} />
                                   </button>
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => openAvailabilityModal(a)} className="text-gray-300 hover:text-blue-500 transition-colors">
-                                    <Pencil size={16} />
-                                  </button>
                                   <button onClick={() => handleDeleteAvailability(a.id)} className="text-gray-300 hover:text-red-500 transition-colors">
                                     <Trash2 size={16} />
                                   </button>
                                 </div>
-                              </div>
                               </div>
                               {a.note && <p className="text-sm text-gray-500 font-medium">{a.note}</p>}
                               <div className="flex items-center justify-between pt-2 border-t border-gray-50">
@@ -1275,7 +1421,7 @@ export default function App() {
                                   a.status === "pending" ? "text-orange-500" : 
                                   a.status === "busy" ? "text-red-900" : "text-gray-400"
                                 }`}>
-                                  {a.status === "open" ? "空き" : a.status === "pending" ? "リクエスト中" : a.status === "confirmed" ? "確定" : "予定あり"}
+                                  {a.status === "open" ? "空き" : a.status === "pending" ? "依頼中" : a.status === "confirmed" ? "確定" : "予定あり"}
                                 </span>
                               </div>
                             </Card>
@@ -1285,6 +1431,31 @@ export default function App() {
                           <p className="text-gray-400 font-bold">予定がありません</p>
                         </div>
                       )}
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-black">1か月分の予定</h3>
+                      <button
+                        onClick={() => setShowPastCalendarItems(v => !v)}
+                        className="text-sm font-bold text-blue-600 hover:underline"
+                      >
+                        {showPastCalendarItems ? "過去分を隠す" : "過去分を表示"}
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {(showPastCalendarItems ? monthlyAvailabilities : monthlyAvailabilities.filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))).map(a => (
+                        <Card key={a.id} className="p-4 flex items-center justify-between">
+                          <div>
+                            <p className="font-black">{format(parseISO(a.date), "M/d (E)", { locale: ja })}</p>
+                            <p className="text-sm text-gray-500">{a.start_time} - {a.end_time}</p>
+                          </div>
+                          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                            {a.status === "open" ? "空き" : a.status === "pending" ? "依頼中" : a.status === "confirmed" ? "確定" : "予定あり"}
+                          </span>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -1307,7 +1478,7 @@ export default function App() {
                     <div className="flex items-center gap-6">
                       <div className="w-20 h-20 bg-gray-100 rounded-3xl overflow-hidden">
                         <img
-                          src={currentUser?.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`}
+                          src={avatarSrc}
                           alt="avatar"
                         />
                       </div>
@@ -1333,6 +1504,18 @@ export default function App() {
                         )}
                         <p className="text-gray-400 font-medium">{accountLabel}</p>
                         <p className="text-xs text-blue-600 font-semibold">ログイン中は通知センターが使えます。LINE連携でプッシュ通知も届きます。</p>
+                        <div className="pt-3 space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">プロフィール画像URL</label>
+                          <div className="flex gap-2">
+                            <input
+                              value={newAvatarUrl}
+                              onChange={e => setNewAvatarUrl(e.target.value)}
+                              placeholder="https://..."
+                              className="flex-1 px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <Button onClick={handleSaveAvatar} variant="outline">保存</Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </section>
@@ -1340,13 +1523,42 @@ export default function App() {
                   <section className="space-y-6 pt-8 border-t border-gray-100">
                     <h3 className="text-xl font-black flex items-center gap-3">
                       <Users size={24} className="text-blue-600" />
-                      コネクション
+                      フォロー / フォロワー
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {connections.length > 0 ? (
-                        <p className="text-gray-600 font-bold">{connections.length}件のコネクションがあります</p>
+                    <div className="space-y-4">
+                      <p className="text-gray-600 font-bold">
+                        フォロー {connections.filter(c => c.user1_id === currentUser?.uid).length}件 / フォロワー {connections.filter(c => c.user2_id === currentUser?.uid).length}件
+                      </p>
+                      <p className="text-sm text-gray-400">フォロワーはあなたの予定を見られます。招待URLから自動でフォローされます。</p>
+                      {connectionUsers.length > 0 ? (
+                        <div className="space-y-3">
+                          {connectionUsers.map(peer => (
+                            <div key={peer.uid} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-full overflow-hidden bg-white">
+                                  <img
+                                    src={peer.avatar_url || peer.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${peer.name}`}
+                                    alt={peer.name}
+                                  />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-bold truncate">{peer.name}</p>
+                                  <p className="text-xs text-gray-400 truncate">{peer.current_role === "manager" ? "マネージャー" : "クルー"}</p>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => window.location.href = `${window.location.origin}?share=${peer.share_token}`}
+                                variant="outline"
+                                icon={CalendarDays}
+                                className="shrink-0"
+                              >
+                                予定を見る
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
-                        <p className="text-gray-400 text-sm italic">コネクションはありません</p>
+                        <p className="text-gray-400 text-sm italic">フォローはまだありません</p>
                       )}
                     </div>
                   </section>
@@ -1356,6 +1568,7 @@ export default function App() {
                       <Clock size={24} className="text-blue-600" />
                       時間プリセット
                     </h3>
+                    <p className="text-sm text-gray-400">テンプレ予定として、隔週の土日や平日をまとめて空きにできます。空きだけ一括削除もできます。</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {presets.length > 0 ? (
                         presets.map(p => (
@@ -1369,6 +1582,11 @@ export default function App() {
                       ) : (
                         <p className="text-gray-400 text-sm italic">登録されているプリセットはありません</p>
                       )}
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <Button onClick={() => handleCreateTemplateAvailabilities("weekend")} variant="outline">隔週土日を追加</Button>
+                      <Button onClick={() => handleCreateTemplateAvailabilities("weekday")} variant="outline">隔週平日を追加</Button>
+                      <Button onClick={handleDeleteOpenAvailabilities} variant="danger">空き時間をすべて削除</Button>
                     </div>
                   </section>
 
@@ -1556,5 +1774,6 @@ export default function App() {
     </div>
   );
 }
+
 
 
