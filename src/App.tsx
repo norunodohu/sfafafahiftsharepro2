@@ -1078,6 +1078,7 @@ export default function App() {
           </div>
           <Button onClick={() => signOut(auth)} variant="danger" className="w-full" icon={LogOut}>
             ログアウト
+          </Button>
         </div>
       </aside>
 
