@@ -131,6 +131,7 @@ interface UserProfile {
   accept_requests: boolean;
   notification_pref?: "none" | "email" | "line" | "both";
   line_user_id?: string;
+  line_picture?: string;
   default_start?: string;
   default_end?: string;
 }
@@ -309,10 +310,12 @@ export default function App() {
           uid: firebaseUser.uid,
           name: profile.displayName || existingData.name,
           line_user_id: profile.userId,
+          line_picture: profile.pictureUrl,
           notification_pref: "line"
         };
         await updateDoc(doc(db, "users", firebaseUser.uid), {
           line_user_id: profile.userId,
+          line_picture: profile.pictureUrl,
           notification_pref: "line",
           name: updatedProfile.name
         });
@@ -328,6 +331,7 @@ export default function App() {
           share_token: Math.random().toString(36).substring(2, 15),
           accept_requests: true,
           line_user_id: profile.userId,
+          line_picture: profile.pictureUrl,
           notification_pref: "line"
         };
         await setDoc(doc(db, "users", firebaseUser.uid), newProfile);
@@ -764,7 +768,10 @@ export default function App() {
         <div className="pt-8 border-t border-gray-100">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden">
-              <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} alt="avatar" />
+              <img
+                src={currentUser?.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`}
+                alt="avatar"
+              />
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-bold truncate">{currentUser?.name}</p>
@@ -1083,7 +1090,10 @@ export default function App() {
                     </h3>
                     <div className="flex items-center gap-6">
                       <div className="w-20 h-20 bg-gray-100 rounded-3xl overflow-hidden">
-                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`} alt="avatar" />
+                        <img
+                          src={currentUser?.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser?.name}`}
+                          alt="avatar"
+                        />
                       </div>
                       <div className="flex-1 space-y-2">
                         {isEditingName ? (
