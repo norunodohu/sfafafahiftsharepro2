@@ -660,7 +660,7 @@ export default function App() {
           <div className="space-y-4">
             <img
               src={CHOICREW_LOGO}
-              alt="choicrew logo"
+              alt="ChoiCrew logo"
               className="w-full max-w-[320px] mx-auto drop-shadow-[0_24px_40px_rgba(37,99,235,0.16)]"
             />
 <p className="text-xl text-gray-500 font-medium">
@@ -699,7 +699,7 @@ export default function App() {
           <div className="flex items-center gap-6">
             <img
               src={CHOICREW_LOGO}
-              alt="choicrew logo"
+              alt="ChoiCrew logo"
               className="w-28 shrink-0 drop-shadow-[0_18px_32px_rgba(37,99,235,0.14)]"
             />
             <div>
@@ -739,7 +739,7 @@ export default function App() {
           </div>
 
           <div className="pt-8 border-t border-gray-100 text-center">
-            <p className="text-gray-400 mb-4 font-medium">あなたもchoicrewで予定を管理しませんか？</p>
+            <p className="text-gray-400 mb-4 font-medium">あなたもChoiCrewで予定を管理しませんか？</p>
             <Button onClick={() => window.location.href = window.location.origin} variant="primary">自分も使ってみる</Button>
           </div>
         </div>
@@ -754,7 +754,7 @@ export default function App() {
         <div className="mb-12">
           <img
             src={CHOICREW_LOGO}
-            alt="choicrew logo"
+            alt="ChoiCrew logo"
             className="w-full max-w-[190px]"
           />
         </div>
