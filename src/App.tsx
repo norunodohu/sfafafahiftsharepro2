@@ -875,8 +875,8 @@ export default function App() {
           </div>
 
           <div className="pt-8 border-t border-gray-100 text-center">
-            <p className="text-gray-400 mb-4 font-medium">縺ゅ↑縺溘ｂChoiCrew縺ｧ莠亥ｮ壹ｒ邂｡逅・＠縺ｾ縺帙ｓ縺具ｼ・/p>
-            <Button onClick={() => window.location.href = window.location.origin} variant="primary">閾ｪ蛻・ｂ菴ｿ縺｣縺ｦ縺ｿ繧・/Button>
+            <p className="text-gray-400 mb-4 font-medium">あなたもChoiCrewで予定を管理してみませんか。</p>
+            <Button onClick={() => window.location.href = window.location.origin} variant="primary">自分でも使ってみる</Button>
           </div>
         </div>
       </div>
@@ -897,9 +897,9 @@ export default function App() {
 
         <nav className="space-y-2 flex-1">
           {[
-            { id: "dashboard", label: "繝繝・す繝･繝懊・繝・, icon: LayoutDashboard },
-            { id: "calendar", label: "繧ｫ繝ｬ繝ｳ繝繝ｼ", icon: CalendarDays },
-            { id: "settings", label: "險ｭ螳・, icon: Settings },
+            { id: "dashboard", label: "ダッシュボード", icon: LayoutDashboard },
+            { id: "calendar", label: "カレンダー", icon: CalendarDays },
+            { id: "settings", label: "設定", icon: Settings },
           ].map(item => (
             <button
               key={item.id}
