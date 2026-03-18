@@ -279,24 +279,18 @@ export default function App() {
     if (!profile) return;
     setIsProcessingLine(true);
     try {
-      let firebaseUser = auth.currentUser;
+      const firebaseUser = auth.currentUser;
       
-      if (!firebaseUser) {
-        // In the original code, signInAnonymously was removed from here but user said "signInAnonymously を一切呼ばない（削除済み状態）"
-        // However, if there's no user, we can't have a UID. 
-        // Let's stick to the prompt's instruction: "signInAnonymously を一切呼ばない（削除済み状態）"
-        // But the prompt also says "firebaseUser = auth.currentUser を取得". 
-        // If it's null, we might have an issue. 
-        // Let's assume the user is already signed in or we handle it.
-      }
-
-      if (firebaseUser) {
-        const q = query(collection(db, "users"), where("line_user_id", "==", profile.userId));
-        const snap = await getDocs(q);
+      // LINE IDで既存ユーザーを探す
+      const q = query(collection(db, "users"), where("line_user_id", "==", profile.userId));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        // 既存ユーザーが見つかった場合
+        const userData = snap.docs[0].data() as UserProfile;
         
-        if (!snap.empty) {
-          const userData = snap.docs[0].data() as UserProfile;
-          
+        if (firebaseUser) {
+          // ログイン中なら、UIDが違えば移行処理
           if (userData.uid !== firebaseUser.uid) {
             const oldUid = userData.uid;
             const newUid = firebaseUser.uid;
@@ -319,6 +313,15 @@ export default function App() {
             setCurrentUser(userData);
           }
         } else {
+          // ログインしていない場合（ユーザーの指示により signInAnonymously は呼ばない）
+          // UI表示のためにステートだけ更新するが、Firebaseの権限はない状態になる
+          setCurrentUser(userData);
+          setIsLoggedIn(true);
+        }
+      } else {
+        // 新規ユーザー（LINE IDが登録されていない）
+        if (firebaseUser) {
+          // ログイン中なら、現在のユーザーにLINE IDを紐付ける
           const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
           if (userDoc.exists()) {
             const existingData = userDoc.data() as UserProfile;
@@ -348,12 +351,20 @@ export default function App() {
             await setDoc(doc(db, "users", firebaseUser.uid), newProfile);
             setCurrentUser(newProfile);
           }
+          setIsLoggedIn(true);
+        } else {
+          // ログインしておらず、LINE IDも未登録の場合
+          alert("LINEで新規登録するには、まずGoogleログインまたはゲスト利用を開始してから、設定画面でLINEを連携してください。");
         }
-        setIsLoggedIn(true);
       }
     } catch (error: any) {
       console.error("Error during LINE login processing:", error);
-      handleFirestoreError(error, OperationType.WRITE, "users");
+      // 権限エラーなどの場合はユーザーに通知
+      if (error.code === 'permission-denied' || error.message?.includes('permissions')) {
+        alert("認証エラーが発生しました。一度ログアウトしてから再度お試しください。");
+      } else {
+        handleFirestoreError(error, OperationType.WRITE, "users");
+      }
     } finally {
       setIsProcessingLine(false);
       setIsAuthReady(true);
