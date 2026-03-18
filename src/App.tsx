@@ -660,7 +660,7 @@ export default function App() {
             <div className="w-24 h-24 bg-blue-600 rounded-[2.5rem] flex items-center justify-center mx-auto shadow-2xl shadow-blue-200 rotate-12">
               <Calendar size={48} className="text-white" />
             </div>
-            <h1 className="text-5xl font-black tracking-tighter text-gray-900">SukiMach</h1>
+            <h1 className="text-5xl font-black tracking-tighter text-gray-900">choicrew</h1>
             <p className="text-xl text-gray-500 font-medium">スキマ時間を価値に変える、<br/>次世代シフト管理ツール</p>
           </div>
 
@@ -733,7 +733,7 @@ export default function App() {
           </div>
 
           <div className="pt-8 border-t border-gray-100 text-center">
-            <p className="text-gray-400 mb-4 font-medium">あなたもSukiMachで予定を管理しませんか？</p>
+            <p className="text-gray-400 mb-4 font-medium">あなたもchoicrewで予定を管理しませんか？</p>
             <Button onClick={() => window.location.href = window.location.origin} variant="primary">自分も使ってみる</Button>
           </div>
         </div>
@@ -749,7 +749,7 @@ export default function App() {
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-100">
             <Calendar size={20} className="text-white" />
           </div>
-          <span className="text-2xl font-black tracking-tighter">SukiMach</span>
+          <span className="text-2xl font-black tracking-tighter">choicrew</span>
         </div>
 
         <nav className="space-y-2 flex-1">
