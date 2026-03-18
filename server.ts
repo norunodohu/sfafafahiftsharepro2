@@ -31,6 +31,18 @@ if (!getApps().length && adminProjectId && adminClientEmail && adminPrivateKey) 
   });
 }
 
+const mintLineCustomToken = async (profile: { userId: string; displayName: string; pictureUrl?: string }) => {
+  if (!getApps().length) {
+    throw new Error("Firebase Admin SDK is not configured");
+  }
+
+  return getAdminAuth().createCustomToken(`line_${profile.userId}`, {
+    line_user_id: profile.userId,
+    line_display_name: profile.displayName,
+    line_picture: profile.pictureUrl || "",
+  });
+};
+
 app.use(cors());
 app.use(express.json());
 
@@ -106,32 +118,20 @@ app.get("/api/auth/line/callback", async (req, res) => {
     });
 
     const profile = profileResponse.data || {};
-    const customToken = getApps().length
-      ? await getAdminAuth().createCustomToken(`line_${profile.userId}`, {
-          line_user_id: profile.userId,
-          line_display_name: profile.displayName,
-        })
-      : null;
-
-    if (!customToken) {
-      throw new Error("Firebase Admin SDK is not configured");
-    }
 
     res.send(`
       <html>
         <body>
           <script>
             const profile = ${JSON.stringify(profile)};
-            const customToken = ${JSON.stringify(customToken)};
             if (window.opener) {
               window.opener.postMessage({ 
                 type: 'LINE_AUTH_SUCCESS', 
-                profile,
-                customToken
+                profile
               }, '*');
               window.close();
             } else {
-              window.location.href = '/?line_user=' + encodeURIComponent(JSON.stringify(profile)) + '&custom_token=' + encodeURIComponent(customToken);
+              window.location.href = '/?line_user=' + encodeURIComponent(JSON.stringify(profile));
             }
           </script>
           <p>LINE連携が完了しました。このウィンドウを閉じてください。</p>
@@ -179,6 +179,21 @@ app.post("/api/notify", async (req, res) => {
     const err = error as { response?: { data?: Record<string, unknown> }, message?: string };
     console.error("LINE Messaging Error:", err.response?.data || err.message);
     res.status(500).json({ error: "Failed to send LINE message" });
+  }
+});
+
+app.post("/api/auth/line/firebase-token", async (req, res) => {
+  try {
+    const profile = req.body?.profile;
+    if (!profile?.userId || !profile?.displayName) {
+      return res.status(400).json({ error: "profile is required" });
+    }
+
+    const customToken = await mintLineCustomToken(profile);
+    res.json({ uid: `line_${profile.userId}`, customToken });
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    res.status(500).json({ error: err.message || "Failed to create custom token" });
   }
 });
 

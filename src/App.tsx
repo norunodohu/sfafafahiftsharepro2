@@ -291,14 +291,21 @@ export default function App() {
     }
   }, []);
 
-  const processLineProfile = useCallback(async (profile: { userId: string, displayName: string, pictureUrl?: string }, customToken?: string | null) => {
+  const processLineProfile = useCallback(async (profile: { userId: string, displayName: string, pictureUrl?: string }) => {
     if (!profile) return;
     setIsProcessingLine(true);
     try {
-      const normalizedToken = customToken?.replace(/^"+|"+$/g, "") || null;
-      if (normalizedToken) {
-        await signInWithCustomToken(auth, normalizedToken);
+      const tokenRes = await fetch("/api/auth/line/firebase-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || !tokenData.customToken) {
+        throw new Error(tokenData.error || "Failed to create custom token");
       }
+
+      await signInWithCustomToken(auth, tokenData.customToken);
       
       const firebaseUser = auth.currentUser;
       if (!firebaseUser) throw new Error("Firebase login failed");
@@ -392,7 +399,7 @@ export default function App() {
     const lineUserParam = urlParams.get('line_user');
     if (lineUserParam && lineUserParam !== "undefined") {
       try {
-        processLineProfile(JSON.parse(decodeURIComponent(lineUserParam)), urlParams.get("custom_token"));
+        processLineProfile(JSON.parse(decodeURIComponent(lineUserParam)));
       } catch (err) {
         console.error("Failed to parse line_user param:", err);
       }
@@ -400,7 +407,7 @@ export default function App() {
 
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'LINE_AUTH_SUCCESS') {
-        processLineProfile(event.data.profile, event.data.customToken);
+        processLineProfile(event.data.profile);
       }
     };
     window.addEventListener('message', handleMessage);
