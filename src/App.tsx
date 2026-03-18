@@ -95,7 +95,7 @@ const handleFirestoreError = (error: Error | unknown, operationType: OperationTy
   const errorMessage = error instanceof Error ? error.message : String(error);
   
   if (errorMessage.includes("Quota exceeded")) {
-    alert("Firebase縺ｮ辟｡譁呎棧縺ｮ蛻ｶ髯舌ｒ雜・∴縺ｾ縺励◆縲ゅ＠縺ｰ繧峨￥譎る俣繧偵♀縺・※縺九ｉ蜀榊ｺｦ縺願ｩｦ縺励￥縺縺輔＞縲・);
+    alert("Firebaseの無料枠の制限を超えました。しばらく時間をおいてから再度お試しください。");
   }
 
   const errInfo: FirestoreErrorInfo = {
