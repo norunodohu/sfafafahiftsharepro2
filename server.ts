@@ -157,13 +157,29 @@ app.post("/api/notify", async (req, res) => {
   const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim();
 
   if (!accessToken) {
-    return res.status(503).json({ error: "LINE_CHANNEL_ACCESS_TOKEN not configured" });
+    return res.status(503).json({
+      success: false,
+      reason: "config_missing",
+      message: "LINE_CHANNEL_ACCESS_TOKEN not configured",
+      details: "公式LINEの通知設定が不足しています。",
+    });
   }
   if (!lineUserId || !message) {
-    return res.status(400).json({ error: "lineUserId and message are required" });
+    return res.status(400).json({
+      success: false,
+      reason: "line_user_missing",
+      message: "lineUserId and message are required",
+      details: "受信側のLINE連携がまだありません。",
+    });
   }
 
   try {
+    const profileCheck = await axios.get(`https://api.line.me/v2/bot/profile/${encodeURIComponent(lineUserId)}`, {
+      headers: {
+        "Authorization": `Bearer ${accessToken}`
+      }
+    });
+
     await axios.post("https://api.line.me/v2/bot/message/push", {
       to: lineUserId,
       messages: [{ type: "text", text: message }]
@@ -173,13 +189,44 @@ app.post("/api/notify", async (req, res) => {
         "Authorization": `Bearer ${accessToken}`
       }
     });
-    res.json({ success: true });
+    res.json({
+      success: true,
+      reason: "delivered",
+      details: "公式LINEから通知しました。",
+      profileCheck: {
+        status: profileCheck.status,
+        userId: profileCheck.data?.userId,
+      },
+    });
   } catch (error: unknown) {
     const err = error as { response?: { data?: Record<string, unknown> }, message?: string };
-    console.error("LINE Messaging Error:", err.response?.data || err.message);
-    res.status(500).json({
+    const status = err.response?.status;
+    const payload = err.response?.data || {};
+    let reason = "push_failed";
+    let details = "公式LINEから通知できませんでした。";
+
+    if (status === 401) {
+      reason = "invalid_token";
+      details = "LINE_CHANNEL_ACCESS_TOKENが無効です。公式LINEのアクセストークンを確認してください。";
+    } else if (status === 403) {
+      reason = "not_authorized";
+      details = "公式LINEの送信権限が不足しています。Messaging APIの設定を確認してください。";
+    } else if (status === 400 && payload?.message === "Failed to send messages") {
+      reason = "not_following_or_blocked";
+      details = "公式LINEは見つかりましたが、友だち追加されていないか、ブロックされています。";
+    } else if (status === 404) {
+      reason = "profile_not_found";
+      details = "受信先が見つからないか、友だち追加されていないか、ブロックされています。";
+    }
+
+    console.error("LINE Messaging Error:", { status, payload: err.response?.data || err.message });
+    res.json({
+      success: false,
+      lineDelivered: false,
       error: "Failed to send LINE message",
-      details: err.response?.data || err.message || "unknown",
+      reason,
+      details,
+      raw: err.response?.data || err.message || "unknown",
     });
   }
 });
