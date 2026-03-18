@@ -1179,7 +1179,7 @@ export default function App() {
                   </div>
                   
                   <div className="grid grid-cols-7 gap-2 sm:gap-4">
-                    {["譌･", "譛・, "轣ｫ", "豌ｴ", "譛ｨ", "驥・, "蝨・].map(d => (
+                    {["日", "月", "火", "水", "木", "金", "土"].map(d => (
                       <div key={d} className="text-center text-xs font-black text-gray-400 uppercase pb-4">{d}</div>
                     ))}
                     {eachDayOfInterval({
