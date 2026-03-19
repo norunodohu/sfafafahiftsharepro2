@@ -4,3 +4,11 @@
 @theme {
   --font-righteous: "Righteous", cursive;
 }
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+input, select, textarea, button {
+  font-size: 16px;
+}

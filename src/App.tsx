@@ -317,6 +317,12 @@ export default function App() {
   const [requestTarget, setRequestTarget] = useState<Availability | null>(null);
   const [requestStart, setRequestStart] = useState("");
   const [requestEnd, setRequestEnd] = useState("");
+  const [showScheduleList, setShowScheduleList] = useState(false);
+  const [scheduleFilter, setScheduleFilter] = useState<"all" | "confirmed" | "open" | "request">("all");
+  const [pendingRequestAction, setPendingRequestAction] = useState<{
+    request: ShiftRequest;
+    mode: "approve" | "reject";
+  } | null>(null);
 
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
   const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
@@ -340,13 +346,7 @@ export default function App() {
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const today = new Date();
   const nextFiveDays = Array.from({ length: 5 }, (_, i) => addDays(today, i));
-  const groupedUpcomingDays = nextFiveDays.map(day => ({
-    day,
-    items: availabilities
-      .filter(a => isSameDay(parseISO(a.date), day))
-      .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
-      .sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`))
-  }));
+  const scheduleListDays = Array.from({ length: 14 }, (_, i) => addDays(today, i));
   const openAvailabilityModal = (availability?: Availability, targetDate?: Date) => {
     if (availability) {
       setEditingAvailability(availability);
@@ -960,7 +960,6 @@ export default function App() {
 
   const handleApproveRequest = async (request: ShiftRequest) => {
     if (!currentUser) return;
-    if (!window.confirm(`${format(parseISO(request.date), "M月d日", { locale: ja })}の予定を承認しますか？`)) return;
     await updateDoc(doc(db, "requests", request.id), { status: "approved" });
     await updateDoc(doc(db, "availabilities", request.availability_id), { status: "confirmed" });
     await createNotification(
@@ -974,7 +973,6 @@ export default function App() {
 
   const handleRejectRequest = async (request: ShiftRequest) => {
     if (!currentUser) return;
-    if (!window.confirm(`${format(parseISO(request.date), "M月d日", { locale: ja })}の予定を辞退しますか？`)) return;
     await updateDoc(doc(db, "requests", request.id), { status: "canceled" });
     await updateDoc(doc(db, "availabilities", request.availability_id), { status: "open" });
     await createNotification(
@@ -1329,8 +1327,8 @@ export default function App() {
                             <span className="px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-xs font-black">承認待ち</span>
                           </div>
                           <div className="flex gap-3">
-                            <Button onClick={() => handleApproveRequest(request)} className="flex-1" icon={Check}>承認</Button>
-                            <Button onClick={() => handleRejectRequest(request)} variant="outline" className="flex-1" icon={X}>辞退</Button>
+                            <Button onClick={() => setPendingRequestAction({ request, mode: "approve" })} className="flex-1" icon={Check}>承認</Button>
+                            <Button onClick={() => setPendingRequestAction({ request, mode: "reject" })} variant="outline" className="flex-1" icon={X}>辞退</Button>
                           </div>
                         </Card>
                       ))}
@@ -1339,35 +1337,71 @@ export default function App() {
                 )}
 
                 <div className="space-y-4">
-                  {groupedUpcomingDays.map(({ day, items }) => (
-                    <div key={day.toISOString()} className="pb-5 border-b border-gray-200 last:border-b-0 last:pb-0">
-                      <div className="flex items-center justify-between gap-3 mb-3">
-                        <div>
-                          <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
-                            {format(day, "M月d日(E)", { locale: ja })}
-                          </p>
-                        </div>
-                        <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs">
-                          予定の登録
-                        </Button>
+                  <button
+                    onClick={() => setShowScheduleList(v => !v)}
+                    className="text-sm font-bold text-blue-600 hover:underline"
+                  >
+                    {showScheduleList ? "予定一覧を閉じる" : "予定を一覧で表示"}
+                  </button>
+                  {showScheduleList && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: "all", label: "全部" },
+                          { id: "confirmed", label: "確定のみ" },
+                          { id: "open", label: "空きのみ" },
+                          { id: "request", label: "リクエストのみ" },
+                        ].map(tab => (
+                          <button
+                            key={tab.id}
+                            onClick={() => setScheduleFilter(tab.id as typeof scheduleFilter)}
+                            className={`px-3 py-2 rounded-xl text-sm font-black ${scheduleFilter === tab.id ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600"}`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
                       </div>
-                      {items.length > 0 ? (
-                        <div className="space-y-2">
-                          {items.map(item => (
-                            <div key={item.id} className="flex items-center justify-between rounded-2xl bg-gray-50 px-3 py-2">
-                              <div className="min-w-0">
-                                <p className="font-bold text-sm truncate">{item.start_time}-{item.end_time}</p>
-                                <p className="text-[11px] text-gray-400 truncate">{item.note || statusLabel(item.status)}</p>
-                              </div>
-                              <span className={`text-sm font-black ${item.status === "confirmed" ? "text-red-500" : "text-gray-500"}`}>{item.status === "confirmed" ? "確" : "空"}</span>
+                      {scheduleListDays.map(day => {
+                        const dayItems = availabilities
+                          .filter(a => isSameDay(parseISO(a.date), day))
+                          .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
+                          .filter(a => {
+                            if (scheduleFilter === "confirmed") return a.status === "confirmed";
+                            if (scheduleFilter === "open") return a.status === "open";
+                            if (scheduleFilter === "request") return a.status === "pending";
+                            return true;
+                          })
+                          .sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
+                        return (
+                          <div key={day.toISOString()} className="pb-4 border-b border-gray-200 last:border-b-0 last:pb-0">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                                {format(day, "M月d日(E)", { locale: ja })}
+                              </p>
+                              <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs">
+                                登録
+                              </Button>
                             </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-400">予定の登録なし</p>
-                      )}
+                            {dayItems.length > 0 ? (
+                              <div className="space-y-2">
+                                {dayItems.map(item => (
+                                  <div key={item.id} className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-sm truncate">{item.start_time}-{item.end_time}</p>
+                                      <p className="text-[11px] text-gray-400 truncate">{item.note || statusLabel(item.status)}</p>
+                                    </div>
+                                    <span className={`text-sm font-black ${item.status === "confirmed" ? "text-red-500" : "text-gray-500"}`}>{item.status === "confirmed" ? "確" : "空"}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-400">予定の登録なし</p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1755,6 +1789,52 @@ export default function App() {
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {pendingRequestAction && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setPendingRequestAction(null)}
+            />
+            <motion.div
+              initial={false}
+              animate={false}
+              exit={false}
+              className="relative w-full max-w-md bg-white rounded-[2rem] p-6 shadow-2xl"
+            >
+              <p className="text-lg font-black mb-2">
+                {pendingRequestAction.mode === "approve" ? "承認しますか？" : "辞退しますか？"}
+              </p>
+              <p className="text-sm text-gray-500">
+                {format(parseISO(pendingRequestAction.request.date), "M月d日(E)", { locale: ja })} {pendingRequestAction.request.start_time}-{pendingRequestAction.request.end_time}
+              </p>
+              <div className="flex gap-3 mt-6">
+                <Button
+                  className="flex-1"
+                  onClick={async () => {
+                    const action = pendingRequestAction;
+                    setPendingRequestAction(null);
+                    if (action.mode === "approve") {
+                      await handleApproveRequest(action.request);
+                    } else {
+                      await handleRejectRequest(action.request);
+                    }
+                  }}
+                >
+                  {pendingRequestAction.mode === "approve" ? "承認" : "辞退"}
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => setPendingRequestAction(null)}>
+                  キャンセル
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showRequestModal && requestTarget && (
