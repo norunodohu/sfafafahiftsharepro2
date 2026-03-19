@@ -412,29 +412,11 @@ export default function App() {
 
   const normalizeAuthId = (value: string) => value.trim().toLowerCase();
   const toAuthEmail = (id: string) => `${normalizeAuthId(id)}@${AUTH_ID_DOMAIN}`;
-  const parseHourMinutes = (value?: string) => {
-    if (!value) return 0;
-    const [h, m] = value.split(":").map(v => Number(v));
-    if (Number.isNaN(h) || Number.isNaN(m)) return 0;
-    return h * 60 + m;
-  };
-  const formatHourLabel = (minutes: number) => {
-    const total = ((minutes % (24 * 60)) + 24 * 60) % (24 * 60);
-    const hours = Math.floor(total / 60);
-    const mins = total % 60;
-    return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
-  };
   const formatCompactTime = (time: string) => {
     const [hour, minute] = time.split(":");
     if (minute === "00") return `${Number(hour)}`;
     return `${Number(hour)}:${minute}`;
   };
-  const weekStartMinutes = parseHourMinutes(currentUser?.default_start || "00:00");
-  const weekEndMinutesRaw = parseHourMinutes(currentUser?.default_end || "24:00");
-  const weekEndMinutes = weekEndMinutesRaw > weekStartMinutes ? Math.min(weekEndMinutesRaw, weekStartMinutes + 24 * 60) : weekStartMinutes + 24 * 60;
-  const weekTimelineMinutes = Math.min(24 * 60, Math.max(60, weekEndMinutes - weekStartMinutes));
-  const weekTimelineHours = Math.ceil(weekTimelineMinutes / 60);
-  const weekTimelineRows = Array.from({ length: weekTimelineHours }, (_, i) => weekStartMinutes + i * 60);
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(selectedDate, { weekStartsOn: 0 }), i));
   const weekDayAvails = weekDays.map(day => displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)));
 
@@ -1745,119 +1727,68 @@ export default function App() {
                     <div className="mt-6 rounded-3xl border border-gray-100 bg-white/70 overflow-hidden">
                       <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-black text-gray-900">週間タイムライン</p>
-                          <p className="text-xs text-gray-400">
-                            {formatHourLabel(weekStartMinutes)} - {formatHourLabel(weekEndMinutes)}
-                            {weekTimelineMinutes >= 24 * 60 ? " / 最大24時間" : ""}
-                          </p>
+                          <p className="text-sm font-black text-gray-900">週間ボード</p>
+                          <p className="text-xs text-gray-400">空白時間は表示せず、予定ブロックだけを並べています。</p>
                         </div>
-                        <p className="text-xs text-gray-400 font-medium">予定を時間帯で俯瞰できます</p>
+                        <p className="text-xs text-gray-400 font-medium">表示は日ごとのブロック順です</p>
                       </div>
                       <div className="overflow-x-auto">
-                        <div className="min-w-[56rem]">
-                          <div className="grid grid-cols-[4.5rem_repeat(7,minmax(0,1fr))] border-b border-gray-100 bg-gray-50/80">
-                            <div className="px-2 py-3 text-[11px] font-black text-gray-400">時間</div>
-                            {weekDays.map(day => (
-                              <div key={day.toISOString()} className="px-2 py-3 text-center">
-                                <p className={`text-sm font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
-                                  {format(day, "M/d", { locale: ja })}
-                                </p>
-                                <p className="text-[10px] text-gray-400">{format(day, "E", { locale: ja })}</p>
-                              </div>
-                            ))}
-                          </div>
-
-                          {weekTimelineRows.map(minute => (
-                            <div key={minute} className="grid grid-cols-[4.5rem_repeat(7,minmax(0,1fr))] border-b border-gray-100 last:border-b-0">
-                              <div className="px-2 py-3 text-[11px] font-bold text-gray-400 bg-gray-50/40">
-                                {formatHourLabel(minute)}
-                              </div>
-                              {weekDays.map((day, dayIndex) => {
-                                const items = weekDayAvails[dayIndex].filter(a => {
-                                  const start = parseHourMinutes(a.start_time);
-                                  return start >= minute && start < minute + 60;
-                                });
-                                return (
-                                  <div key={`${day.toISOString()}-${minute}`} className="min-h-16 sm:min-h-20 px-1 py-1 relative">
-                                    {items.map((item, itemIndex) => (
-                                      <button
-                                        key={`${item.id}-${itemIndex}`}
-                                        onClick={() => openAvailabilityModal(item)}
-                                        className={`w-full mb-1 rounded-2xl px-3 py-2 text-left text-xs font-bold shadow-sm border transition-all ${
-                                          item.status === "confirmed"
-                                            ? "bg-red-50 border-red-100 text-red-700"
-                                            : item.status === "pending"
-                                              ? "bg-orange-50 border-orange-100 text-orange-700"
-                                              : item.status === "busy"
-                                                ? "bg-red-100 border-red-200 text-red-900"
-                                                : "bg-gray-50 border-gray-100 text-gray-700"
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="truncate">{item.start_time}-{item.end_time}</span>
-                                          <span className="shrink-0">{item.status === "confirmed" ? "確定" : item.status === "pending" ? "依頼中" : item.status === "busy" ? "予定あり" : "空き"}</span>
-                                        </div>
-                                        {item.note && <p className="mt-1 font-medium opacity-80 truncate">{item.note}</p>}
-                                      </button>
-                                    ))}
+                        <div className="min-w-[60rem] grid grid-cols-7 divide-x divide-gray-100">
+                          {weekDays.map((day, dayIndex) => {
+                            const items = weekDayAvails[dayIndex].slice().sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
+                            return (
+                              <div key={day.toISOString()} className="min-h-[18rem] p-3">
+                                <div className="flex items-center justify-between gap-2 mb-3">
+                                  <div>
+                                    <p className={`text-sm font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                                      {format(day, "M/d", { locale: ja })}
+                                    </p>
+                                    <p className="text-[10px] text-gray-400">{format(day, "E", { locale: ja })}</p>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          ))}
+                                  <button onClick={() => openDayDetailModal(day)} className="text-[10px] font-black text-blue-600 hover:underline">
+                                    詳細
+                                  </button>
+                                </div>
+                                <div className="space-y-2">
+                                  {items.length > 0 ? items.map((item, itemIndex) => (
+                                    <button
+                                      key={`${item.id}-${itemIndex}`}
+                                      onClick={() => openAvailabilityModal(item)}
+                                      className={`w-full rounded-2xl px-3 py-3 text-left text-xs font-bold shadow-sm border transition-all ${
+                                        item.status === "confirmed"
+                                          ? "bg-red-50 border-red-100 text-red-700"
+                                          : item.status === "pending"
+                                            ? "bg-orange-50 border-orange-100 text-orange-700"
+                                            : item.status === "busy"
+                                              ? "bg-red-100 border-red-200 text-red-900"
+                                              : "bg-gray-50 border-gray-100 text-gray-700"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="truncate">{formatCompactTime(item.start_time)}-{formatCompactTime(item.end_time)}</span>
+                                        <span className="shrink-0">{item.status === "confirmed" ? "確定" : item.status === "pending" ? "依頼中" : item.status === "busy" ? "予定あり" : "空き"}</span>
+                                      </div>
+                                      {item.is_recurring && (
+                                        <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-black text-blue-600">
+                                          <Repeat2 size={11} /> ループ
+                                        </p>
+                                      )}
+                                      {item.note && <p className="mt-1 font-medium opacity-80 truncate">{item.note}</p>}
+                                    </button>
+                                  )) : (
+                                    <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/70 px-3 py-6 text-center text-xs text-gray-400">
+                                      予定なし
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
                   )}
                 </Card>
-
-                {calendarMode === "week" && (
-                  <div className="lg:col-span-4 space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xl font-black">{format(selectedDate, "M/d (E)", { locale: ja })}の予定</h3>
-                      <Button onClick={() => openAvailabilityModal(undefined, selectedDate)} variant="outline" icon={Plus} className="p-2 h-10 w-10 rounded-full" />
-                    </div>
-                    
-                    <div className="space-y-4">
-                      {selectedDayItems.length > 0 ? (
-                        selectedDayItems.map(a => (
-                          <Card key={a.id} className="p-5 space-y-3 group relative">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                  <div className={`w-2 h-2 rounded-full ${
-                                    a.status === "confirmed" ? "bg-red-500" : 
-                                    a.status === "pending" ? "bg-orange-500" : 
-                                    a.status === "busy" ? "bg-red-900" : "bg-gray-400"
-                                  }`}></div>
-                                  <p className="text-lg font-black">{a.start_time} - {a.end_time}</p>
-                                  {a.is_recurring && <Repeat2 size={14} className="text-blue-500" />}
-                                </div>
-                              <div className="flex items-center gap-2">
-                                <button onClick={() => a.status === "confirmed" ? alert("確定のため変更できません。") : openAvailabilityModal(a)} className={`transition-colors ${a.status === "confirmed" ? "text-gray-200" : "text-gray-300 hover:text-blue-500"}`}>
-                                  <Pencil size={16} />
-                                </button>
-                              </div>
-                            </div>
-                            {a.note && <p className="text-sm text-red-500 font-medium">{a.note}</p>}
-                            <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                            <span className={`text-[10px] font-bold uppercase tracking-widest ${
-                                a.status === "confirmed" ? "text-red-500" : 
-                                a.status === "pending" ? "text-orange-500" : 
-                                a.status === "busy" ? "text-red-900" : "text-gray-400"
-                              }`}>
-                                {a.status === "confirmed" ? "確定済み" : statusLabel(a.status)}
-                            </span>
-                            </div>
-                          </Card>
-                        ))
-                      ) : (
-                        <div className="py-12 text-center space-y-4 bg-white rounded-3xl border border-dashed border-gray-200">
-                          <p className="text-gray-400 font-bold">予定がありません</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </motion.div>
             )}
 
