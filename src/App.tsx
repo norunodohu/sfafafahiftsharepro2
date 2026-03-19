@@ -426,6 +426,26 @@ export default function App() {
 
   const normalizeAuthId = (value: string) => value.trim().toLowerCase();
   const toAuthEmail = (id: string) => `${normalizeAuthId(id)}@${AUTH_ID_DOMAIN}`;
+  const parseHourMinutes = (value?: string) => {
+    if (!value) return 0;
+    const [h, m] = value.split(":").map(v => Number(v));
+    if (Number.isNaN(h) || Number.isNaN(m)) return 0;
+    return h * 60 + m;
+  };
+  const formatHourLabel = (minutes: number) => {
+    const total = ((minutes % (24 * 60)) + 24 * 60) % (24 * 60);
+    const hours = Math.floor(total / 60);
+    const mins = total % 60;
+    return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+  };
+  const weekStartMinutes = parseHourMinutes(currentUser?.default_start || "00:00");
+  const weekEndMinutesRaw = parseHourMinutes(currentUser?.default_end || "24:00");
+  const weekEndMinutes = weekEndMinutesRaw > weekStartMinutes ? Math.min(weekEndMinutesRaw, weekStartMinutes + 24 * 60) : weekStartMinutes + 24 * 60;
+  const weekTimelineMinutes = Math.min(24 * 60, Math.max(60, weekEndMinutes - weekStartMinutes));
+  const weekTimelineHours = Math.ceil(weekTimelineMinutes / 60);
+  const weekTimelineRows = Array.from({ length: weekTimelineHours }, (_, i) => weekStartMinutes + i * 60);
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(selectedDate, { weekStartsOn: 0 }), i));
+  const weekDayAvails = weekDays.map(day => displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)));
 
   const createNotification = async (userId: string, type: Notification["type"], message: string, date?: string) => {
     await addDoc(collection(db, "notifications"), {
@@ -1679,6 +1699,75 @@ export default function App() {
                       );
                     })}
                   </div>
+
+                  {calendarMode === "week" && (
+                    <div className="mt-6 rounded-3xl border border-gray-100 bg-white/70 overflow-hidden">
+                      <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-gray-900">週間タイムライン</p>
+                          <p className="text-xs text-gray-400">
+                            {formatHourLabel(weekStartMinutes)} - {formatHourLabel(weekEndMinutes)}
+                            {weekTimelineMinutes >= 24 * 60 ? " / 最大24時間" : ""}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-400 font-medium">予定を時間帯で俯瞰できます</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[56rem]">
+                          <div className="grid grid-cols-[4.5rem_repeat(7,minmax(0,1fr))] border-b border-gray-100 bg-gray-50/80">
+                            <div className="px-2 py-3 text-[11px] font-black text-gray-400">時間</div>
+                            {weekDays.map(day => (
+                              <div key={day.toISOString()} className="px-2 py-3 text-center">
+                                <p className={`text-sm font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                                  {format(day, "M/d", { locale: ja })}
+                                </p>
+                                <p className="text-[10px] text-gray-400">{format(day, "E", { locale: ja })}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {weekTimelineRows.map(minute => (
+                            <div key={minute} className="grid grid-cols-[4.5rem_repeat(7,minmax(0,1fr))] border-b border-gray-100 last:border-b-0">
+                              <div className="px-2 py-3 text-[11px] font-bold text-gray-400 bg-gray-50/40">
+                                {formatHourLabel(minute)}
+                              </div>
+                              {weekDays.map((day, dayIndex) => {
+                                const items = weekDayAvails[dayIndex].filter(a => {
+                                  const start = parseHourMinutes(a.start_time);
+                                  return start >= minute && start < minute + 60;
+                                });
+                                return (
+                                  <div key={`${day.toISOString()}-${minute}`} className="min-h-16 sm:min-h-20 px-1 py-1 relative">
+                                    {items.map((item, itemIndex) => (
+                                      <button
+                                        key={`${item.id}-${itemIndex}`}
+                                        onClick={() => openAvailabilityModal(item)}
+                                        className={`w-full mb-1 rounded-2xl px-3 py-2 text-left text-xs font-bold shadow-sm border transition-all ${
+                                          item.status === "confirmed"
+                                            ? "bg-red-50 border-red-100 text-red-700"
+                                            : item.status === "pending"
+                                              ? "bg-orange-50 border-orange-100 text-orange-700"
+                                              : item.status === "busy"
+                                                ? "bg-red-100 border-red-200 text-red-900"
+                                                : "bg-gray-50 border-gray-100 text-gray-700"
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="truncate">{item.start_time}-{item.end_time}</span>
+                                          <span className="shrink-0">{item.status === "confirmed" ? "確定" : item.status === "pending" ? "依頼中" : item.status === "busy" ? "予定あり" : "空き"}</span>
+                                        </div>
+                                        {item.note && <p className="mt-1 font-medium opacity-80 truncate">{item.note}</p>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </Card>
 
                 <div className="lg:col-span-4 space-y-6">
