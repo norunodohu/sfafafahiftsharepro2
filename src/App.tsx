@@ -19,7 +19,8 @@ import {
   ArrowRight,
   Pencil,
   Eye,
-  Link2
+  Link2,
+  Repeat2
 } from "lucide-react";
 import { 
   initializeApp 
@@ -155,6 +156,8 @@ interface Availability {
   status: "open" | "pending" | "confirmed" | "busy";
   note?: string;
   is_private_note?: boolean;
+  is_recurring?: boolean;
+  loop_group_id?: string;
   created_at?: unknown;
 }
 
@@ -311,11 +314,13 @@ export default function App() {
   const [draftTime, setDraftTime] = useState({ start: "10:00", end: "15:00" });
   const [draftNote, setDraftNote] = useState("");
   const [draftStatus, setDraftStatus] = useState<Availability["status"]>("open");
+  const [draftIsRecurring, setDraftIsRecurring] = useState(false);
   const [lastNewDraft, setLastNewDraft] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     time: { start: "10:00", end: "15:00" },
     note: "",
     status: "open" as Availability["status"],
+    isRecurring: false,
   });
   const [newAvatarUrl, setNewAvatarUrl] = useState("");
   const [showPastCalendarItems, setShowPastCalendarItems] = useState(false);
@@ -330,8 +335,7 @@ export default function App() {
     request: ShiftRequest;
     mode: "approve" | "reject";
   } | null>(null);
-  const [showWeekdayTemplate, setShowWeekdayTemplate] = useState(false);
-  const [showWeekendTemplate, setShowWeekendTemplate] = useState(false);
+  const [showDayDetailModal, setShowDayDetailModal] = useState(false);
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [nameEditValue, setNameEditValue] = useState("");
 
@@ -350,36 +354,8 @@ export default function App() {
   const incomingRequests = currentUser
     ? requests.filter(r => r.staff_id === currentUser.uid && r.status === "pending")
     : [];
-  const monthlyAvailabilities = availabilities
-    .filter(a => {
-      const d = parseISO(a.date);
-      return d.getFullYear() === selectedDate.getFullYear() && d.getMonth() === selectedDate.getMonth();
-    })
-    .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const today = new Date();
-  const templateAvailabilities = [
-    ...(showWeekdayTemplate ? Array.from({ length: 14 }, (_, i) => addDays(today, i)).filter(date => date.getDay() >= 1 && date.getDay() <= 5).map(date => ({
-      id: `weekday-${format(date, "yyyy-MM-dd")}`,
-      user_id: currentUser?.uid || "",
-      user_name: currentUser?.name,
-      date: format(date, "yyyy-MM-dd"),
-      start_time: currentUser?.default_start || "09:00",
-      end_time: currentUser?.default_end || "17:00",
-      status: "open" as const,
-      note: "隔週平日テンプレ",
-    })) : []),
-    ...(showWeekendTemplate ? Array.from({ length: 14 }, (_, i) => addDays(today, i)).filter(date => date.getDay() === 0 || date.getDay() === 6).map(date => ({
-      id: `weekend-${format(date, "yyyy-MM-dd")}`,
-      user_id: currentUser?.uid || "",
-      user_name: currentUser?.name,
-      date: format(date, "yyyy-MM-dd"),
-      start_time: currentUser?.default_start || "09:00",
-      end_time: currentUser?.default_end || "17:00",
-      status: "open" as const,
-      note: "隔週土日テンプレ",
-    })) : []),
-  ] as Availability[];
-  const displayedAvailabilities = [...availabilities, ...templateAvailabilities].sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
+  const displayedAvailabilities = [...availabilities].sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const nextFiveDays = Array.from({ length: 5 }, (_, i) => addDays(today, i));
   const scheduleListDays = Array.from({ length: 14 }, (_, i) => addDays(today, i));
   const publicUpcomingAvailabilities = availabilities
@@ -395,6 +371,9 @@ export default function App() {
     requests.some(r => r.availability_id === availabilityId && r.staff_id === currentUser?.uid && r.status === "pending");
   const isApprovedMyRequest = (availabilityId: string) =>
     requests.some(r => r.availability_id === availabilityId && r.staff_id === currentUser?.uid && r.status === "approved");
+  const selectedDayItems = displayedAvailabilities
+    .filter(a => isSameDay(parseISO(a.date), selectedDate))
+    .sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
   const openAvailabilityModal = (availability?: Availability, targetDate?: Date) => {
     if (availability) {
       setEditingAvailability(availability);
@@ -402,6 +381,7 @@ export default function App() {
       setDraftTime({ start: availability.start_time, end: availability.end_time });
       setDraftNote(availability.note || "");
       setDraftStatus(availability.status);
+      setDraftIsRecurring(Boolean(availability.is_recurring));
     } else {
       setEditingAvailability(null);
       const baseDate = targetDate || selectedDate || new Date();
@@ -409,8 +389,14 @@ export default function App() {
       setDraftTime(lastNewDraft.time);
       setDraftNote(lastNewDraft.note);
       setDraftStatus(lastNewDraft.status);
+      setDraftIsRecurring(lastNewDraft.isRecurring);
     }
     setShowAddModal(true);
+  };
+
+  const openDayDetailModal = (day: Date) => {
+    setSelectedDate(day);
+    setShowDayDetailModal(true);
   };
 
   const closeAvailabilityModal = () => {
@@ -979,15 +965,44 @@ export default function App() {
         end_time: draftTime.end,
         status: draftStatus,
         note: draftNote,
+        is_recurring: draftIsRecurring,
       };
 
       if (editingAvailability) {
-        await updateDoc(doc(db, "availabilities", editingAvailability.id), payload);
+        if (editingAvailability.loop_group_id && draftIsRecurring && (draftTime.start !== editingAvailability.start_time || draftTime.end !== editingAvailability.end_time)) {
+          const applyToSeries = window.confirm("この予定はループ予定です。変更を系列全体に反映しますか？\n「キャンセル」を押すとこの日だけ変更します。");
+          if (applyToSeries) {
+            const snap = await getDocs(query(collection(db, "availabilities"), where("loop_group_id", "==", editingAvailability.loop_group_id)));
+            const batch = writeBatch(db);
+            snap.docs.forEach(d => batch.update(doc(db, "availabilities", d.id), payload));
+            await batch.commit();
+          } else {
+            await updateDoc(doc(db, "availabilities", editingAvailability.id), payload);
+          }
+        } else {
+          await updateDoc(doc(db, "availabilities", editingAvailability.id), payload);
+        }
       } else {
-        await addDoc(collection(db, "availabilities"), {
-          ...payload,
-          created_at: serverTimestamp()
-        });
+        if (draftIsRecurring) {
+          const loopGroupId = Math.random().toString(36).substring(2, 15);
+          const batch = writeBatch(db);
+          Array.from({ length: 8 }, (_, i) => addDays(parseISO(draftDate), i * 14)).forEach((date, index) => {
+            const ref = doc(collection(db, "availabilities"));
+            batch.set(ref, {
+              ...payload,
+              date: format(date, "yyyy-MM-dd"),
+              loop_group_id: loopGroupId,
+              is_recurring: true,
+              created_at: serverTimestamp(),
+            });
+          });
+          await batch.commit();
+        } else {
+          await addDoc(collection(db, "availabilities"), {
+            ...payload,
+            created_at: serverTimestamp()
+          });
+        }
       }
 
       closeAvailabilityModal();
@@ -996,6 +1011,7 @@ export default function App() {
         time: draftTime,
         note: draftNote,
         status: draftStatus,
+        isRecurring: draftIsRecurring,
       });
     } catch (e: unknown) {
       console.error(e);
@@ -1684,12 +1700,21 @@ export default function App() {
                       return (
                         <button 
                           key={day.toString()}
-                          onClick={() => setSelectedDate(day)}
+                          onClick={() => calendarMode === "month" ? openDayDetailModal(day) : setSelectedDate(day)}
                           className={`rounded-2xl flex flex-col items-center justify-start transition-all relative ${calendarMode === "week" ? "h-10 sm:h-14 px-1 py-0.5" : "aspect-square justify-center gap-1"} ${isSelected ? "bg-blue-600 text-white shadow-xl shadow-blue-200" : "hover:bg-gray-50"} ${isOutsideCurrentMonth && !isSelected ? "text-gray-300" : ""}`}
                         >
                           <div className="w-full flex items-center justify-between">
                             <span className={`text-lg sm:text-xl font-black ${isToday && !isSelected ? "text-blue-600" : ""} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`}>{format(day, "d")}</span>
                           </div>
+                          {calendarMode === "month" && dayAvails.length > 0 && (
+                            <div className="w-full mt-1 space-y-1 text-[10px] leading-tight">
+                              {dayAvails.slice(0, 2).map(a => (
+                                <div key={a.id} className={`truncate rounded-lg px-1.5 py-0.5 ${a.status === "confirmed" ? "bg-red-50 text-red-700" : a.status === "pending" ? "bg-orange-50 text-orange-700" : a.status === "busy" ? "bg-red-100 text-red-900" : "bg-gray-50 text-gray-600"} ${isOutsideCurrentMonth ? "opacity-50" : ""}`}>
+                                  {a.start_time} - {a.end_time}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                           <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1">
                             {dayAvails.slice(0, 3).map((a, idx) => (
                               <span key={idx} className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${a.status === "confirmed" ? "bg-red-500" : a.status === "busy" ? "bg-red-900" : a.status === "pending" ? "bg-orange-500" : "bg-gray-400"} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`} />
@@ -1770,87 +1795,53 @@ export default function App() {
                   )}
                 </Card>
 
-                <div className="lg:col-span-4 space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-black">{format(selectedDate, "M/d (E)", { locale: ja })}の予定</h3>
-                    <Button onClick={() => openAvailabilityModal(undefined, selectedDate)} variant="outline" icon={Plus} className="p-2 h-10 w-10 rounded-full" />
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {displayedAvailabilities
-                      .filter(a => isSameDay(parseISO(a.date), selectedDate))
-                      .length > 0 ? (
-                        displayedAvailabilities
-                          .filter(a => isSameDay(parseISO(a.date), selectedDate))
-                          .map(a => (
-                            <Card key={a.id} className="p-5 space-y-3 group relative">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                {calendarMode === "week" && (
+                  <div className="lg:col-span-4 space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xl font-black">{format(selectedDate, "M/d (E)", { locale: ja })}の予定</h3>
+                      <Button onClick={() => openAvailabilityModal(undefined, selectedDate)} variant="outline" icon={Plus} className="p-2 h-10 w-10 rounded-full" />
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {selectedDayItems.length > 0 ? (
+                        selectedDayItems.map(a => (
+                          <Card key={a.id} className="p-5 space-y-3 group relative">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
                                   <div className={`w-2 h-2 rounded-full ${
                                     a.status === "confirmed" ? "bg-red-500" : 
                                     a.status === "pending" ? "bg-orange-500" : 
                                     a.status === "busy" ? "bg-red-900" : "bg-gray-400"
                                   }`}></div>
                                   <p className="text-lg font-black">{a.start_time} - {a.end_time}</p>
+                                  {a.is_recurring && <Repeat2 size={14} className="text-blue-500" />}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => a.status === "confirmed" ? alert("確定のため変更できません。") : openAvailabilityModal(a)} className={`transition-colors ${a.status === "confirmed" ? "text-gray-200" : "text-gray-300 hover:text-blue-500"}`}>
-                                    <Pencil size={16} />
-                                  </button>
-                                </div>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => a.status === "confirmed" ? alert("確定のため変更できません。") : openAvailabilityModal(a)} className={`transition-colors ${a.status === "confirmed" ? "text-gray-200" : "text-gray-300 hover:text-blue-500"}`}>
+                                  <Pencil size={16} />
+                                </button>
                               </div>
-                              {a.note && <p className="text-sm text-red-500 font-medium">{a.note}</p>}
-                              <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-                              <span className={`text-[10px] font-bold uppercase tracking-widest ${
-                                  a.status === "confirmed" ? "text-red-500" : 
-                                  a.status === "pending" ? "text-orange-500" : 
-                                  a.status === "busy" ? "text-red-900" : "text-gray-400"
-                                }`}>
-                                  {a.status === "confirmed" ? "確定済み" : statusLabel(a.status)}
-                              </span>
-                              </div>
-                            </Card>
-                          ))
+                            </div>
+                            {a.note && <p className="text-sm text-red-500 font-medium">{a.note}</p>}
+                            <div className="flex items-center justify-between pt-2 border-t border-gray-50">
+                            <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                                a.status === "confirmed" ? "text-red-500" : 
+                                a.status === "pending" ? "text-orange-500" : 
+                                a.status === "busy" ? "text-red-900" : "text-gray-400"
+                              }`}>
+                                {a.status === "confirmed" ? "確定済み" : statusLabel(a.status)}
+                            </span>
+                            </div>
+                          </Card>
+                        ))
                       ) : (
                         <div className="py-12 text-center space-y-4 bg-white rounded-3xl border border-dashed border-gray-200">
                           <p className="text-gray-400 font-bold">予定がありません</p>
                         </div>
                       )}
-                  </div>
-
-                  <div className="space-y-4 pt-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-black">ちょい先の予定</h3>
-                    </div>
-                    <div className="space-y-3">
-                      {Array.from({ length: 3 }, (_, i) => addDays(new Date(), i + 1)).map(day => {
-                        const dayItems = displayedAvailabilities
-                          .filter(a => isSameDay(parseISO(a.date), day))
-                          .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
-                          .sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
-                        return (
-                          <div key={day.toISOString()} className="pt-3 border-t border-gray-100 first:border-t-0 first:pt-0">
-                            <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
-                              {format(day, "M月d日(E)", { locale: ja })}
-                            </p>
-                            {dayItems.length > 0 ? (
-                              <div className="mt-2 space-y-2">
-                                {dayItems.map(a => (
-                                  <div key={a.id} className="flex items-center justify-between">
-                                    <p className="text-sm text-gray-600">{a.start_time} - {a.end_time}</p>
-                                    <span className={`text-xs font-black ${a.status === "confirmed" ? "text-red-500" : "text-gray-400"}`}>{a.status === "confirmed" ? "確" : "空"}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-400 mt-2">予定の登録なし</p>
-                            )}
-                          </div>
-                        );
-                      })}
                     </div>
                   </div>
-                </div>
+                )}
               </motion.div>
             )}
 
@@ -1931,22 +1922,8 @@ export default function App() {
                           </div>
                         </div>
                         <div className="pt-3 space-y-2">
-                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">表示トグル</label>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setShowWeekdayTemplate(v => !v)}
-                              className={`px-4 py-3 rounded-xl text-sm font-black ${showWeekdayTemplate ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600"}`}
-                            >
-                              隔週平日
-                            </button>
-                            <button
-                              onClick={() => setShowWeekendTemplate(v => !v)}
-                              className={`px-4 py-3 rounded-xl text-sm font-black ${showWeekendTemplate ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600"}`}
-                            >
-                              隔週土日
-                            </button>
-                          </div>
-                          <p className="text-xs text-gray-500">オンのときだけ空きとして表示され、オフにすると消えます。依頼は通常どおりDBに登録されます。</p>
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">予定追加の考え方</label>
+                          <p className="text-xs text-gray-500">予定追加時に「隔週で同じ予定を入れる」を選ぶと、ループ予定として保存されます。</p>
                         </div>
                       </div>
                     </div>
@@ -2110,6 +2087,71 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showDayDetailModal && (
+          <div className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center p-0 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDayDetailModal(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={false}
+              animate={false}
+              exit={false}
+              className="relative w-full max-w-2xl bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 sm:p-8 shadow-2xl max-h-[85vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-2xl font-black">{format(selectedDate, "M月d日(E)", { locale: ja })}</h3>
+                  <p className="text-sm text-gray-400">この日の予定を確認・編集できます。</p>
+                </div>
+                <button onClick={() => setShowDayDetailModal(false)} className="p-2 rounded-full hover:bg-gray-100"><X size={18} /></button>
+              </div>
+
+              <div className="space-y-3">
+                <Button onClick={() => { openAvailabilityModal(undefined, selectedDate); setShowDayDetailModal(false); }} className="w-full" icon={Plus}>
+                  この日に予定を追加
+                </Button>
+
+                {selectedDayItems.length > 0 ? (
+                  selectedDayItems.map(item => (
+                    <Card key={item.id} className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-lg font-black">{item.start_time} - {item.end_time}</p>
+                            {item.is_recurring && <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-black"><Repeat2 size={12} />ループ</span>}
+                          </div>
+                          <p className="text-sm text-gray-500 font-medium mt-1">{statusLabel(item.status)}</p>
+                          {item.note && <p className="text-sm text-red-500 font-medium mt-1">{item.note}</p>}
+                        </div>
+                        <Button
+                          onClick={() => {
+                            openAvailabilityModal(item);
+                            setShowDayDetailModal(false);
+                          }}
+                          variant="outline"
+                          className="shrink-0"
+                        >
+                          編集
+                        </Button>
+                      </div>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="py-10 text-center text-gray-400 font-bold border border-dashed border-gray-200 rounded-3xl">
+                    この日は予定がありません
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {pendingRequestAction && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div
@@ -2255,6 +2297,17 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+
+                <label className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-4">
+                  <input
+                    type="checkbox"
+                    checked={draftIsRecurring}
+                    onChange={e => setDraftIsRecurring(e.target.checked)}
+                    className="w-5 h-5 accent-blue-600"
+                  />
+                  <span className="text-sm font-bold text-gray-700">隔週で同じ予定を入れる</span>
+                </label>
+                <p className="text-xs text-gray-500">ループ予定にはマークが付きます。編集時は系列全体か、その日だけかを確認します。</p>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
