@@ -652,14 +652,14 @@ export default function App() {
           setCurrentUser(profile);
           setIsLoggedIn(true);
           setNewName(profile.name);
+          setIsAuthReady(true);
         } else {
           setCurrentUser(null);
           setIsLoggedIn(false);
+          setIsAuthReady(true);
         }
       } catch (error: unknown) {
         console.error("Auth error:", error);
-      } finally {
-        setIsAuthReady(true);
       }
     });
 
