@@ -1373,11 +1373,11 @@ export default function App() {
                           <button
                             onClick={async () => {
                               if (isBusy) {
-                                alert("これはプレビューなので、依頼ができません。現在依頼を受け付けている予定です。");
+                                alert("この予定はすでに埋まっています。");
                                 return;
                               }
                               if (isOwnPreview) {
-                                alert("これはプレビューなので、依頼ができません。現在依頼を受け付けている予定です。");
+                                alert("これは自分のプレビューです。依頼は不要です。");
                                 return;
                               }
                               if (!isLoggedIn) {
@@ -1674,7 +1674,7 @@ export default function App() {
                                             ? "bg-orange-50 border-orange-100 text-orange-700"
                                             : item.status === "busy"
                                               ? "bg-red-100 border-red-200 text-red-900"
-                                              : "bg-gray-50 border-gray-100 text-gray-700"
+                                              : "bg-white border-dashed border-gray-300 text-gray-700"
                                       }`}
                                     >
                                       <div className="flex items-center justify-between gap-2">
@@ -1703,8 +1703,8 @@ export default function App() {
                   )}
 
                   {calendarMode === "month" && (
-                    <div className="overflow-x-auto">
-                      <div className="min-w-[80rem] grid grid-cols-7 gap-2">
+                    <div className="overflow-x-hidden">
+                      <div className="w-full max-w-[90vw] grid grid-cols-7 gap-2 mx-auto">
                         {["日", "月", "火", "水", "木", "金", "土"].map(d => {
                           const isSun = d === "日";
                           const isSat = d === "土";
@@ -1734,7 +1734,7 @@ export default function App() {
                               {dayAvails.length > 0 && (
                                 <div className="w-full mt-1 space-y-1 text-[10px] leading-tight">
                                   {dayAvails.slice(0, 2).map(a => (
-                                    <div key={a.id} className={`truncate rounded-lg px-1.5 py-0.5 ${a.status === "confirmed" ? "bg-red-50 text-red-700" : a.status === "pending" ? "bg-orange-50 text-orange-700" : a.status === "busy" ? "bg-red-100 text-red-900" : "bg-gray-50 text-gray-600"} ${isOutsideCurrentMonth ? "opacity-50" : ""}`}>
+                                    <div key={a.id} className={`truncate rounded-lg px-1.5 py-0.5 ${a.status === "confirmed" ? "bg-red-50 text-red-700" : a.status === "pending" ? "bg-orange-50 text-orange-700" : a.status === "busy" ? "bg-red-100 text-red-900" : "bg-white border border-dashed border-gray-300 text-gray-600"} ${isOutsideCurrentMonth ? "opacity-50" : ""}`}>
                                       {formatCompactTime(a.start_time)}-{formatCompactTime(a.end_time)}
                                     </div>
                                   ))}
