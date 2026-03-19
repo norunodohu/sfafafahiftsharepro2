@@ -1197,7 +1197,7 @@ export default function App() {
       <main className={`lg:ml-72 min-h-screen pb-28 lg:pb-12`}>
         {/* Header */}
         <header className="sticky top-0 z-10 bg-[#F8FAFC]/80 backdrop-blur-md px-6 py-5 lg:px-12 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 lg:gap-3 min-w-0">
             <button
               className="lg:hidden w-11 h-11 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-600"
               onClick={() => setShowMobileMenu(v => !v)}
@@ -1209,11 +1209,18 @@ export default function App() {
                 <div className="w-4 h-0.5 bg-current rounded-full" />
               </div>
             </button>
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest">
+            <button
+              onClick={() => openAvailabilityModal(undefined, selectedDate)}
+              className="lg:hidden w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-200"
+            >
+              <Plus size={18} />
+            </button>
+            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden w-9 h-9 shrink-0" />
+            <h2 className="hidden lg:block text-sm font-bold text-gray-400 uppercase tracking-widest">
               {view === "dashboard" ? "Overview" : view === "calendar" ? "Schedule" : "Preferences"}
             </h2>
-            <h1 className="text-3xl font-black tracking-tight">
-              {view === "dashboard" ? "ダッシュボード" : view === "calendar" ? "カレンダー" : "設定"}
+            <h1 className="text-[1.3rem] lg:text-3xl font-black tracking-tight leading-none truncate">
+              {view === "dashboard" ? "ダッシュボード" : view === "calendar" ? "スケジュール" : "設定"}
             </h1>
           </div>
 
