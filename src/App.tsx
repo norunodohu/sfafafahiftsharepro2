@@ -68,13 +68,7 @@ const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 const auth = getAuth(app);
 const CHOICREW_LOGO = "/choicrew-logo.svg";
 const AUTH_ID_DOMAIN = "choicrew.local";
-const presetAvatars = [
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=crew1",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=crew2",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=crew3",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=crew4",
-  "https://api.dicebear.com/7.x/avataaars/svg?seed=crew5"
-];
+const presetAvatars = Array.from({ length: 30 }, (_, i) => `https://api.dicebear.com/7.x/avataaars/svg?seed=crew${i + 1}`);
 
 // Error Handling
 enum OperationType {
@@ -152,6 +146,7 @@ interface UserProfile {
   default_start?: string;
   default_end?: string;
   share_period_days?: 7 | 14 | 30;
+  share_paused?: boolean;
 }
 
 interface Availability {
@@ -199,7 +194,8 @@ interface Connection {
   id: string;
   user1_id: string;
   user2_id: string;
-  status: "active";
+  status: "active" | "blocked";
+  blocked_by?: string;
 }
 
 interface Preset {
@@ -329,6 +325,7 @@ export default function App() {
     isRecurring: false,
   });
   const [selectedAvatar, setSelectedAvatar] = useState("");
+  const [showAllAvatars, setShowAllAvatars] = useState(false);
   const [showPastCalendarItems, setShowPastCalendarItems] = useState(false);
   const [notificationFeedback, setNotificationFeedback] = useState("");
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -364,7 +361,14 @@ export default function App() {
   const displayedAvailabilities = [...availabilities].sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const nextFiveDays = Array.from({ length: 5 }, (_, i) => addDays(today, i));
   const scheduleListDays = Array.from({ length: 14 }, (_, i) => addDays(today, i));
+  const isBlockedByOwner = isPublicView && currentUser ? connections.some(c =>
+    c.status === "blocked" &&
+    c.blocked_by === publicUser?.uid &&
+    ([c.user1_id, c.user2_id].includes(currentUser.uid))
+  ) : false;
+  const isPublicHidden = Boolean(publicUser?.share_paused || isBlockedByOwner);
   const publicUpcomingAvailabilities = availabilities
+    .filter(() => !isPublicHidden)
     .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
     .filter(a => parseISO(a.date) < addDays(new Date(new Date().setHours(0,0,0,0)), publicSharePeriodDays))
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
@@ -425,6 +429,7 @@ export default function App() {
   };
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(selectedDate, { weekStartsOn: 0 }), i));
   const weekDayAvails = weekDays.map(day => displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)));
+  const visibleAvatars = showAllAvatars ? presetAvatars : presetAvatars.slice(0, 5);
 
   const createNotification = async (userId: string, type: Notification["type"], message: string, date?: string) => {
     await addDoc(collection(db, "notifications"), {
@@ -611,7 +616,8 @@ export default function App() {
           line_picture: profile.pictureUrl,
           avatar_url: "",
           notification_pref: "line",
-          share_period_days: 7
+          share_period_days: 7,
+          share_paused: false
         };
         await setDoc(doc(db, "users", firebaseUser.uid), newProfile);
         setCurrentUser(newProfile);
@@ -643,7 +649,8 @@ export default function App() {
               share_token: Math.random().toString(36).substring(2, 15),
               accept_requests: true,
               avatar_url: "",
-              share_period_days: 7
+              share_period_days: 7,
+              share_paused: false
             };
             await setDoc(doc(db, "users", user.uid), newProfile);
             userDoc = await getDoc(doc(db, "users", user.uid));
@@ -1133,6 +1140,42 @@ export default function App() {
     setCurrentUser({ ...currentUser, share_period_days: days });
   };
 
+  const handleUnfollow = async (peerId: string) => {
+    if (!currentUser) return;
+    const pairId = [currentUser.uid, peerId].sort().join("_");
+    await deleteDoc(doc(db, "connections", pairId));
+    setConnections(prev => prev.filter(c => !(c.user1_id === currentUser.uid && c.user2_id === peerId) && !(c.user2_id === currentUser.uid && c.user1_id === peerId)));
+  };
+
+  const handleBlock = async (peerId: string) => {
+    if (!currentUser) return;
+    const pairId = [currentUser.uid, peerId].sort().join("_");
+    await setDoc(doc(db, "connections", pairId), {
+      user1_id: currentUser.uid,
+      user2_id: peerId,
+      status: "blocked",
+      blocked_by: currentUser.uid
+    }, { merge: true });
+  };
+
+  const handleUnblock = async (peerId: string) => {
+    if (!currentUser) return;
+    const pairId = [currentUser.uid, peerId].sort().join("_");
+    await setDoc(doc(db, "connections", pairId), {
+      user1_id: currentUser.uid,
+      user2_id: peerId,
+      status: "active",
+      blocked_by: ""
+    }, { merge: true });
+  };
+
+  const handleToggleSharePause = async () => {
+    if (!currentUser) return;
+    const next = !currentUser.share_paused;
+    await updateDoc(doc(db, "users", currentUser.uid), { share_paused: next });
+    setCurrentUser({ ...currentUser, share_paused: next });
+  };
+
   const scrollToSection = (target: React.RefObject<HTMLDivElement | null>) => {
     target.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -1296,7 +1339,11 @@ export default function App() {
           <div className="space-y-4">
             <h3 className="text-xl font-black">公開中の空き時間</h3>
             <div className="grid gap-4">
-              {publicScheduleDates.length > 0 ? (
+              {isPublicHidden ? (
+                <div className="py-12 text-center bg-white rounded-3xl border border-dashed border-gray-200 text-gray-500 font-bold">
+                  現在このユーザーの予定は非公開です。
+                </div>
+              ) : publicScheduleDates.length > 0 ? (
                 publicScheduleDates.map(date => (
                   <div key={date} className="space-y-3">
                     <div className="pb-2 border-b border-gray-200">
@@ -1509,7 +1556,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="px-4 sm:px-6 lg:px-12 max-w-[96rem] mx-auto">
+        <div className="px-4 sm:px-6 lg:px-12 max-w-[110rem] mx-auto">
           <AnimatePresence mode="wait">
             {view === "myboard" && (
               <motion.div 
@@ -1519,7 +1566,7 @@ export default function App() {
                 exit={false}
                 className="grid grid-cols-1 lg:grid-cols-12 gap-8"
               >
-                <Card className="lg:col-span-8 p-5 sm:p-8">
+                <Card className="lg:col-span-12 p-5 sm:p-8">
                   <div className="flex items-start justify-between mb-4 sm:mb-8 gap-3">
                     <div className="min-w-0">
                       <div className="text-[10px] sm:hidden font-black text-gray-400 leading-none">{format(selectedDate, "yyyy年", { locale: ja })}</div>
@@ -1542,95 +1589,56 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className={`grid grid-cols-7 gap-1 sm:gap-4 ${calendarMode === "week" ? "text-[11px]" : ""}`}>
-                    {["日", "月", "火", "水", "木", "金", "土"].map(d => {
-                      const isSun = d === "日";
-                      const isSat = d === "土";
-                      return (
-                        <div key={d} className={`relative text-center font-black uppercase pb-1 sm:pb-4 ${isSun ? "text-red-500" : isSat ? "text-blue-500" : "text-gray-900"}`}>
-                          {d}
-                        </div>
-                      );
-                    })}
-                    {eachDayOfInterval(
-                      calendarMode === "week"
-                        ? { start: startOfWeek(selectedDate, { weekStartsOn: 0 }), end: endOfWeek(selectedDate, { weekStartsOn: 0 }) }
-                        : {
-                            start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 0 }),
-                            end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 0 })
-                          }
-                    ).map(day => {
-                      const dayAvails = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day));
-                      const isSelected = isSameDay(day, selectedDate);
-                      const isToday = isSameDay(day, new Date());
-                      const isOutsideCurrentMonth = day.getMonth() !== selectedDate.getMonth();
-
-                      // Determine chip text and color
-                      let chipText = "";
-                      let chipColor = "";
-                      if (dayAvails.length > 0) {
-                        const hasConfirmed = dayAvails.some(a => a.status === "confirmed");
-                        const hasPending = dayAvails.some(a => a.status === "pending");
-                        const hasBusy = dayAvails.some(a => a.status === "busy");
-                        
-                          if (hasConfirmed) {
-                            chipText = "確定";
-                            chipColor = "bg-red-500";
-                          } else if (hasPending) {
-                            chipText = "依頼中";
-                            chipColor = "bg-orange-500";
-                          } else if (hasBusy) {
-                            chipText = "予定あり";
-                            chipColor = "bg-red-900";
-                          } else {
-                            chipText = "空き";
-                            chipColor = "bg-gray-400";
-                          }
-                      }
-
-                      return (
-                        <button 
-                          key={day.toString()}
-                          onClick={() => calendarMode === "month" ? openDayDetailModal(day) : setSelectedDate(day)}
-                          className={`rounded-2xl flex flex-col items-center justify-start transition-all relative ${calendarMode === "week" ? "h-10 sm:h-14 px-1 py-0.5" : "aspect-square justify-center gap-1"} ${isSelected ? "bg-blue-600 text-white shadow-xl shadow-blue-200" : "hover:bg-gray-50"} ${isOutsideCurrentMonth && !isSelected ? "text-gray-300" : ""}`}
-                        >
-                          <div className="w-full flex items-center justify-between">
-                            <span className={`text-lg sm:text-xl font-black ${isToday && !isSelected ? "text-blue-600" : ""} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`}>{format(day, "d")}</span>
-                          </div>
-                  {calendarMode === "month" && dayAvails.length > 0 && (
-                    <div className="w-full mt-1 space-y-1 text-[10px] leading-tight">
-                      {dayAvails.slice(0, 2).map(a => (
-                        <div key={a.id} className={`truncate rounded-lg px-1.5 py-0.5 ${a.status === "confirmed" ? "bg-red-50 text-red-700" : a.status === "pending" ? "bg-orange-50 text-orange-700" : a.status === "busy" ? "bg-red-100 text-red-900" : "bg-gray-50 text-gray-600"} ${isOutsideCurrentMonth ? "opacity-50" : ""}`}>
-                                  {formatCompactTime(a.start_time)}-{formatCompactTime(a.end_time)}
-                                </div>
-                              ))}
+                  {calendarMode === "day" && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {[addDays(selectedDate, -1), selectedDate, addDays(selectedDate, 1)].map((day, idx) => {
+                        const items = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)).sort((a,b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
+                        const isFocus = idx === 1;
+                        return (
+                          <div key={day.toISOString()} className={`rounded-2xl border ${isFocus ? "border-blue-200 bg-blue-50/40" : "border-gray-100 bg-gray-50/60"} p-4 space-y-3`}>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                                  {format(day, "M/d(E)", { locale: ja })}
+                                </p>
+                                {isFocus && <p className="text-xs text-blue-600 font-semibold">今日のタブ</p>}
+                              </div>
+                              <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs">追加</Button>
                             </div>
-                          )}
-                          <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1">
-                            {dayAvails.slice(0, 3).map((a, idx) => (
-                              <span key={idx} className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${a.status === "confirmed" ? "bg-red-500" : a.status === "busy" ? "bg-red-900" : a.status === "pending" ? "bg-orange-500" : "bg-gray-400"} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`} />
-                            ))}
+                            <div className="space-y-2">
+                              {items.length > 0 ? items.map(item => (
+                                <div key={item.id} className="rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+                                  <div className="flex items-center justify-between gap-2 text-sm font-bold">
+                                    <span>{item.start_time}-{item.end_time}</span>
+                                    <span className="text-xs text-gray-500">{item.status === "confirmed" ? "確定" : item.status === "pending" ? "依頼中" : item.status === "busy" ? "予定あり" : "空き"}</span>
+                                  </div>
+                                  {item.note && <p className="text-xs text-gray-500 mt-1 truncate">{item.note}</p>}
+                                </div>
+                              )) : (
+                                <div className="text-xs text-gray-400 bg-white border border-dashed border-gray-200 rounded-xl px-3 py-4 text-center">予定なし</div>
+                              )}
+                            </div>
                           </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {calendarMode === "week" && (
-                    <div className="mt-6 rounded-3xl border border-gray-100 bg-white/70 overflow-hidden">
+                    <div className="mt-2 rounded-3xl border border-gray-100 bg-white/70 overflow-hidden">
                       <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-black text-gray-900">週間ボード</p>
                           <p className="text-xs text-gray-400">空白時間は表示せず、予定ブロックだけを並べています。</p>
                         </div>
-                        <p className="text-xs text-gray-400 font-medium">表示は日ごとのブロック順です</p>
+                        <p className="text-xs text-gray-400 font-medium">横幅広めで表示中</p>
                       </div>
                       <div className="overflow-x-auto">
-                        <div className="min-w-[60rem] grid grid-cols-7 divide-x divide-gray-100">
+                        <div className="min-w-[90rem] grid grid-cols-7 divide-x divide-gray-100">
                           {weekDays.map((day, dayIndex) => {
                             const items = weekDayAvails[dayIndex].slice().sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
                             return (
-                              <div key={day.toISOString()} className="min-h-[18rem] p-3">
+                              <div key={day.toISOString()} className="min-h-[20rem] p-4">
                                 <div className="flex items-center justify-between gap-2 mb-3">
                                   <div>
                                     <p className={`text-sm font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
@@ -1681,6 +1689,56 @@ export default function App() {
                       </div>
                     </div>
                   )}
+
+                  {calendarMode === "month" && (
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[90rem] grid grid-cols-7 gap-2">
+                        {["日", "月", "火", "水", "木", "金", "土"].map(d => {
+                          const isSun = d === "日";
+                          const isSat = d === "土";
+                          return (
+                            <div key={d} className={`relative text-center font-black uppercase pb-2 ${isSun ? "text-red-500" : isSat ? "text-blue-500" : "text-gray-900"}`}>
+                              {d}
+                            </div>
+                          );
+                        })}
+                        {eachDayOfInterval({
+                          start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 0 }),
+                          end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 0 })
+                        }).map(day => {
+                          const dayAvails = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day));
+                          const isSelected = isSameDay(day, selectedDate);
+                          const isToday = isSameDay(day, new Date());
+                          const isOutsideCurrentMonth = day.getMonth() !== selectedDate.getMonth();
+                          return (
+                            <button 
+                              key={day.toString()}
+                              onClick={() => openDayDetailModal(day)}
+                              className={`rounded-2xl flex flex-col items-center justify-start transition-all relative aspect-square justify-center gap-1 ${isSelected ? "bg-blue-600 text-white shadow-xl shadow-blue-200" : "hover:bg-gray-50"} ${isOutsideCurrentMonth && !isSelected ? "text-gray-300" : ""}`}
+                            >
+                              <div className="w-full flex items-center justify-between">
+                                <span className={`text-lg sm:text-xl font-black ${isToday && !isSelected ? "text-blue-600" : ""} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`}>{format(day, "d")}</span>
+                              </div>
+                              {dayAvails.length > 0 && (
+                                <div className="w-full mt-1 space-y-1 text-[10px] leading-tight">
+                                  {dayAvails.slice(0, 2).map(a => (
+                                    <div key={a.id} className={`truncate rounded-lg px-1.5 py-0.5 ${a.status === "confirmed" ? "bg-red-50 text-red-700" : a.status === "pending" ? "bg-orange-50 text-orange-700" : a.status === "busy" ? "bg-red-100 text-red-900" : "bg-gray-50 text-gray-600"} ${isOutsideCurrentMonth ? "opacity-50" : ""}`}>
+                                      {formatCompactTime(a.start_time)}-{formatCompactTime(a.end_time)}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1">
+                                {dayAvails.slice(0, 3).map((a, idx) => (
+                                  <span key={idx} className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${a.status === "confirmed" ? "bg-red-500" : a.status === "busy" ? "bg-red-900" : a.status === "pending" ? "bg-orange-500" : "bg-gray-400"} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`} />
+                                ))}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </Card>
               </motion.div>
             )}
@@ -1707,6 +1765,9 @@ export default function App() {
                       <Button onClick={handleRefreshShareToken} variant="outline" className="whitespace-nowrap" icon={RefreshCcw}>
                         招待URLを更新
                       </Button>
+                      <Button onClick={handleToggleSharePause} variant={currentUser?.share_paused ? "secondary" : "outline"} className="whitespace-nowrap">
+                        {currentUser?.share_paused ? "公開に戻す" : "全員に非公開"}
+                      </Button>
                     </div>
                   </div>
                   <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl px-4 py-3 text-sm font-mono break-all text-gray-700">
@@ -1726,6 +1787,7 @@ export default function App() {
                       ))}
                     </div>
                     <span className="text-xs text-gray-400">共有リンクで表示される日数を切り替えられます。</span>
+                    {currentUser?.share_paused && <span className="text-xs text-red-500 font-bold">現在: 非公開モード</span>}
                   </div>
                 </Card>
 
@@ -1750,6 +1812,7 @@ export default function App() {
                         );
                         const isFollowing = relation?.user1_id === currentUser?.uid;
                         const isFollower = relation?.user2_id === currentUser?.uid;
+                        const isBlocked = relation?.status === "blocked";
                         return (
                           <div
                             key={peer.uid}
@@ -1766,18 +1829,39 @@ export default function App() {
                               <div className="min-w-0">
                                 <p className="font-bold truncate">{peer.name}</p>
                                 <p className="text-xs text-gray-400 truncate">
-                                  {isFollowing && "フォロー中"}{isFollowing && isFollower ? " / " : ""}{isFollower && "フォロワー"}
+                                  {isBlocked ? "ブロック中" : null}
+                                  {!isBlocked && (
+                                    <>
+                                      {isFollowing && "フォロー中"}{isFollowing && isFollower ? " / " : ""}{isFollower && "フォロワー"}
+                                    </>
+                                  )}
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {!isBlocked && (
+                                <Button
+                                  onClick={() => window.location.href = `${window.location.origin}?share=${peer.share_token}`}
+                                  variant="outline"
+                                  className="whitespace-nowrap"
+                                  icon={CalendarDays}
+                                >
+                                  予定を開く
+                                </Button>
+                              )}
                               <Button
-                                onClick={() => window.location.href = `${window.location.origin}?share=${peer.share_token}`}
-                                variant="outline"
+                                onClick={() => isBlocked ? handleUnblock(peer.uid) : handleBlock(peer.uid)}
+                                variant={isBlocked ? "secondary" : "outline"}
                                 className="whitespace-nowrap"
-                                icon={CalendarDays}
                               >
-                                予定を開く
+                                {isBlocked ? "ブロック解除" : "ブロック"}
+                              </Button>
+                              <Button
+                                onClick={() => handleUnfollow(peer.uid)}
+                                variant="ghost"
+                                className="text-red-500 whitespace-nowrap"
+                              >
+                                フレンド解除
                               </Button>
                             </div>
                           </div>
@@ -1846,7 +1930,7 @@ export default function App() {
                     <div className="pt-3 space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">アバターを選ぶ</label>
                       <div className="flex flex-wrap gap-3">
-                        {presetAvatars.map(url => (
+                        {visibleAvatars.map(url => (
                           <button
                             key={url}
                             onClick={() => handleSaveAvatar(url)}
@@ -1856,6 +1940,12 @@ export default function App() {
                           </button>
                         ))}
                       </div>
+                      <button
+                        onClick={() => setShowAllAvatars(v => !v)}
+                        className="text-xs text-blue-600 font-bold underline"
+                      >
+                        {showAllAvatars ? "閉じる" : "もっと見る"}
+                      </button>
                     </div>
 
                     <div className="pt-3 space-y-2">
