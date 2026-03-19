@@ -323,6 +323,8 @@ export default function App() {
     request: ShiftRequest;
     mode: "approve" | "reject";
   } | null>(null);
+  const [showWeekdayTemplate, setShowWeekdayTemplate] = useState(false);
+  const [showWeekendTemplate, setShowWeekendTemplate] = useState(false);
 
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
   const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
@@ -345,6 +347,29 @@ export default function App() {
     })
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const today = new Date();
+  const templateAvailabilities = [
+    ...(showWeekdayTemplate ? Array.from({ length: 14 }, (_, i) => addDays(today, i)).filter(date => date.getDay() >= 1 && date.getDay() <= 5).map(date => ({
+      id: `weekday-${format(date, "yyyy-MM-dd")}`,
+      user_id: currentUser?.uid || "",
+      user_name: currentUser?.name,
+      date: format(date, "yyyy-MM-dd"),
+      start_time: currentUser?.default_start || "09:00",
+      end_time: currentUser?.default_end || "17:00",
+      status: "open" as const,
+      note: "隔週平日テンプレ",
+    })) : []),
+    ...(showWeekendTemplate ? Array.from({ length: 14 }, (_, i) => addDays(today, i)).filter(date => date.getDay() === 0 || date.getDay() === 6).map(date => ({
+      id: `weekend-${format(date, "yyyy-MM-dd")}`,
+      user_id: currentUser?.uid || "",
+      user_name: currentUser?.name,
+      date: format(date, "yyyy-MM-dd"),
+      start_time: currentUser?.default_start || "09:00",
+      end_time: currentUser?.default_end || "17:00",
+      status: "open" as const,
+      note: "隔週土日テンプレ",
+    })) : []),
+  ] as Availability[];
+  const displayedAvailabilities = [...availabilities, ...templateAvailabilities].sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const nextFiveDays = Array.from({ length: 5 }, (_, i) => addDays(today, i));
   const scheduleListDays = Array.from({ length: 14 }, (_, i) => addDays(today, i));
   const openAvailabilityModal = (availability?: Availability, targetDate?: Date) => {
@@ -999,51 +1024,6 @@ export default function App() {
     alert("プロフィール画像を更新しました。");
   };
 
-  const handleCreateTemplateAvailabilities = async (mode: "weekend" | "weekday") => {
-    if (!currentUser) return;
-    const startTime = currentUser.default_start || "09:00";
-    const endTime = currentUser.default_end || "17:00";
-    const today = new Date();
-    const batchDates: string[] = [];
-    for (let i = 0; i < 56; i++) {
-      const date = addDays(today, i);
-      const weekIndex = Math.floor(i / 7);
-      const isAltWeek = weekIndex % 2 === 0;
-      const day = date.getDay();
-      const matches = mode === "weekend"
-        ? (day === 0 || day === 6)
-        : (day >= 1 && day <= 5);
-      if (matches && isAltWeek) {
-        batchDates.push(format(date, "yyyy-MM-dd"));
-      }
-    }
-
-    for (const date of batchDates) {
-      await addDoc(collection(db, "availabilities"), {
-        user_id: currentUser.uid,
-        user_name: currentUser.name,
-        date,
-        start_time: startTime,
-        end_time: endTime,
-        status: "open",
-        note: mode === "weekend" ? "隔週土日テンプレ" : "隔週平日テンプレ",
-        created_at: serverTimestamp()
-      });
-    }
-    alert("テンプレ予定を追加しました。");
-  };
-
-  const handleDeleteOpenAvailabilities = async () => {
-    if (!currentUser) return;
-    const openSnap = await getDocs(
-      query(collection(db, "availabilities"), where("user_id", "==", currentUser.uid), where("status", "==", "open"))
-    );
-    const batch = writeBatch(db);
-    openSnap.docs.forEach(d => batch.delete(doc(db, "availabilities", d.id)));
-    await batch.commit();
-    alert("空き時間をすべて削除しました。");
-  };
-
   const scrollToSection = (target: React.RefObject<HTMLDivElement | null>) => {
     target.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -1126,8 +1106,8 @@ export default function App() {
           <div className="space-y-4">
             <h3 className="text-xl font-black">公開中の空き時間</h3>
             <div className="grid gap-4">
-              {availabilities.length > 0 ? (
-                availabilities.map(a => (
+              {displayedAvailabilities.length > 0 ? (
+                displayedAvailabilities.map(a => (
                   <Card key={a.id} className="p-6 flex items-center justify-between">
                     <div className="flex items-center gap-6">
                       <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
@@ -1354,7 +1334,7 @@ export default function App() {
                         ))}
                       </div>
                       {scheduleListDays.map(day => {
-                        const dayItems = availabilities
+                        const dayItems = displayedAvailabilities
                           .filter(a => isSameDay(parseISO(a.date), day))
                           .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
                           .filter(a => {
@@ -1455,7 +1435,7 @@ export default function App() {
                         ? { start: startOfWeek(selectedDate, { weekStartsOn: 0 }), end: endOfWeek(selectedDate, { weekStartsOn: 0 }) }
                         : { start: startOfMonth(selectedDate), end: endOfMonth(selectedDate) }
                     ).map(day => {
-                      const dayAvails = availabilities.filter(a => isSameDay(parseISO(a.date), day));
+                      const dayAvails = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day));
                       const isSelected = isSameDay(day, selectedDate);
                       const isToday = isSameDay(day, new Date());
 
@@ -1509,10 +1489,10 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-4">
-                    {availabilities
+                    {displayedAvailabilities
                       .filter(a => isSameDay(parseISO(a.date), selectedDate))
                       .length > 0 ? (
-                        availabilities
+                        displayedAvailabilities
                           .filter(a => isSameDay(parseISO(a.date), selectedDate))
                           .map(a => (
                             <Card key={a.id} className="p-5 space-y-3 group relative">
@@ -1556,7 +1536,7 @@ export default function App() {
                     </div>
                     <div className="space-y-3">
                       {Array.from({ length: 3 }, (_, i) => addDays(new Date(), i + 1)).map(day => {
-                        const dayItems = availabilities
+                        const dayItems = displayedAvailabilities
                           .filter(a => isSameDay(parseISO(a.date), day))
                           .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
                           .sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
@@ -1682,6 +1662,24 @@ export default function App() {
                               </button>
                             ))}
                           </div>
+                        </div>
+                        <div className="pt-3 space-y-2">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">表示トグル</label>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setShowWeekdayTemplate(v => !v)}
+                              className={`px-4 py-3 rounded-xl text-sm font-black ${showWeekdayTemplate ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600"}`}
+                            >
+                              隔週平日
+                            </button>
+                            <button
+                              onClick={() => setShowWeekendTemplate(v => !v)}
+                              className={`px-4 py-3 rounded-xl text-sm font-black ${showWeekendTemplate ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600"}`}
+                            >
+                              隔週土日
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500">オンのときだけ空きとして表示され、オフにすると消えます。依頼は通常どおりDBに登録されます。</p>
                         </div>
                       </div>
                     </div>
