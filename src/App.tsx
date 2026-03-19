@@ -5,7 +5,6 @@ import {
   Settings, 
   Share2, 
   Plus, 
-  Trash2, 
   Bell, 
   ChevronRight, 
   ChevronLeft, 
@@ -311,6 +310,8 @@ export default function App() {
   });
   const [newAvatarUrl, setNewAvatarUrl] = useState("");
   const [showPastCalendarItems, setShowPastCalendarItems] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState<"confirmed" | "requests" | "open" | "all">("confirmed");
+  const [notificationFeedback, setNotificationFeedback] = useState("");
 
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
   const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
@@ -335,6 +336,15 @@ export default function App() {
       return d.getFullYear() === selectedDate.getFullYear() && d.getMonth() === selectedDate.getMonth();
     })
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
+  const confirmedCount = availabilities.filter(a => a.status === "confirmed").length;
+  const requestCount = incomingRequests.length;
+  const openCount = availabilities.filter(a => a.status === "open").length;
+  const dashboardItems = {
+    confirmed: availabilities.filter(a => a.status === "confirmed"),
+    requests: incomingRequests,
+    open: availabilities.filter(a => a.status === "open"),
+    all: availabilities,
+  }[dashboardTab];
   const openAvailabilityModal = (availability?: Availability, targetDate?: Date) => {
     if (availability) {
       setEditingAvailability(availability);
@@ -1177,20 +1187,17 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="pt-8 border-t border-gray-100">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center">
-              {avatarIsGuestDefault ? <User size={24} className="text-gray-400" /> : <img src={avatarSrc} alt="avatar" />}
-            </div>
+          <div className="pt-8 border-t border-gray-100">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-gray-100 rounded-full overflow-hidden flex items-center justify-center">
+                {avatarIsGuestDefault ? <User size={24} className="text-gray-400" /> : <img src={avatarSrc} alt="avatar" />}
+              </div>
             <div className="flex-1 min-w-0">
               <p className="font-bold truncate">{currentUser?.name}</p>
               <p className="text-xs text-gray-400 truncate">{accountLabel}</p>
             </div>
+            </div>
           </div>
-          <Button onClick={() => signOut(auth)} variant="danger" className="w-full" icon={LogOut}>
-            ログアウト
-          </Button>
-        </div>
       </aside>
 
       {/* Main Content */}
@@ -1209,7 +1216,7 @@ export default function App() {
                 <div className="w-4 h-0.5 bg-current rounded-full" />
               </div>
             </button>
-            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden w-9 h-9 shrink-0" />
+            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden w-14 h-14 shrink-0" />
             <h2 className="hidden lg:block text-sm font-bold text-gray-400 uppercase tracking-widest">
               {view === "dashboard" ? "Overview" : view === "calendar" ? "Schedule" : "Preferences"}
             </h2>
@@ -1242,14 +1249,22 @@ export default function App() {
                           <p className="text-sm font-bold">{notification.message}</p>
                           <p className="text-[11px] text-gray-400 mt-1">{notification.type}</p>
                         </div>
-                        <button onClick={async () => deleteDoc(doc(db, "notifications", notification.id))} className="text-gray-300 hover:text-red-500">
-                          <Trash2 size={16} />
+                        <button
+                          onClick={async () => {
+                            await deleteDoc(doc(db, "notifications", notification.id));
+                            setNotificationFeedback("削除しました");
+                            window.setTimeout(() => setNotificationFeedback(""), 1800);
+                          }}
+                          className="text-gray-300 hover:text-red-500"
+                        >
+                          <X size={16} />
                         </button>
                       </div>
                     )) : (
                       <p className="text-sm text-gray-400 p-4 text-center">通知はまだありません</p>
                     )}
                   </div>
+                  {notificationFeedback && <p className="text-xs text-gray-400 px-1">{notificationFeedback}</p>}
                 </div>
               )}
             </div>
@@ -1271,79 +1286,48 @@ export default function App() {
               >
                 {/* Quick Actions */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Card className="p-8 bg-blue-600 text-white border-none relative overflow-hidden group">
-                    <div className="relative z-10 space-y-4">
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                        <Share2 size={24} />
+                  <div className="space-y-2">
+                    <div className="h-10 px-4 rounded-2xl bg-blue-600 text-white flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex items-center gap-2">
+                        <Share2 size={16} className="shrink-0" />
+                        <span className="text-sm font-black truncate">スケジュール共有リンク</span>
                       </div>
-                      <div>
-                        <h3 className="text-xl font-bold">空き情報を共有</h3>
-                        <p className="text-blue-100 text-sm">このリンクからあなたの予定が共有されます。一度プレビューでご確認ください。</p>
-                      </div>
-                      <input
-                        readOnly
-                        value={shareLink}
-                        className="w-full px-4 py-3 rounded-2xl bg-white/95 text-blue-700 text-sm font-mono border border-white/30 outline-none"
-                      />
-                      <p className="text-xs text-blue-100 font-semibold">共有期間は設定により1週間、2週間、1か月から選べます。共有URL側では本人の共有期間が1週間と表示されます。</p>
-                      <Button onClick={copyShareLink} variant="secondary" className="w-full bg-white text-blue-600">
-                        共有リンクをコピー
-                      </Button>
-                      <Button onClick={handleRefreshShareToken} variant="ghost" className="w-full text-white/90 border border-white/20">
-                        <Link2 size={18} />
-                        招待URLを更新
-                      </Button>
-                    </div>
-                    <Share2 size={120} className="absolute -right-8 -bottom-8 text-white/10 group-hover:scale-110 transition-transform" />
-                  </Card>
-
-                  <Card className="p-8 space-y-4" interactive onClick={() => scrollToSection(confirmedSectionRef)}>
-                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                      <Check size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">確定件数</h3>
-                      <p className="text-gray-400 text-sm">確定している予定の数</p>
-                    </div>
-                      <p className="text-4xl font-black">{availabilities.filter(a => a.status === "confirmed").length}<span className="text-lg font-bold ml-1">件</span></p>
-                  </Card>
-
-                  <Card className="p-8 space-y-4" interactive onClick={() => scrollToSection(requestSectionRef)}>
-                    <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center">
-                      <Clock size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">受信リクエスト</h3>
-                      <p className="text-gray-400 text-sm">承認待ちの依頼</p>
-                    </div>
-                    <p className="text-4xl font-black">{incomingRequests.length}<span className="text-lg font-bold ml-1">件</span></p>
-                  </Card>
-
-                  <Card className="p-8 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
-                        <Settings size={24} />
-                      </div>
-                      <button 
-                        onClick={async () => {
-                          if (isGuestUser) return;
-                          if (!currentUser) return;
-                          const newVal = !currentUser.accept_requests;
-                          await updateDoc(doc(db, "users", currentUser.uid), { accept_requests: newVal });
-                          setCurrentUser({ ...currentUser, accept_requests: newVal });
-                        }}
-                        disabled={isGuestUser}
-                        className={`w-12 h-6 rounded-full transition-all relative ${isGuestUser ? "bg-gray-200 opacity-60" : currentUser?.accept_requests ? "bg-blue-600" : "bg-gray-200"}`}
-                      >
-                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isGuestUser ? "left-1" : currentUser?.accept_requests ? "left-7" : "left-1"}`} />
+                      <button onClick={copyShareLink} className="text-xs font-bold px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25">
+                        コピー
                       </button>
                     </div>
-                    <div>
-                      <h3 className="text-xl font-bold">依頼受付</h3>
-                      <p className="text-gray-400 text-sm">新規リクエストの許可</p>
+                    <p className="text-xs text-blue-700 font-semibold">注意: 1週間分が表示されます。設定から共有期間を確認できます。</p>
+                  </div>
+
+                  <Card className="p-4 sm:p-8 space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { id: "confirmed", label: `確定件数（${confirmedCount}）`, icon: Check },
+                        { id: "requests", label: `依頼件数（${requestCount}）`, icon: Clock },
+                        { id: "open", label: `空き（${openCount}）`, icon: Calendar },
+                        { id: "all", label: `すべて（${availabilities.length}）`, icon: Settings },
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setDashboardTab(tab.id as typeof dashboardTab)}
+                          className={`flex-1 min-w-[calc(50%-0.25rem)] sm:min-w-0 px-3 py-3 rounded-2xl text-sm font-black flex items-center justify-center gap-2 ${dashboardTab === tab.id ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-600"}`}
+                        >
+                          <tab.icon size={16} />
+                          <span className="whitespace-nowrap">{tab.label}</span>
+                        </button>
+                      ))}
                     </div>
-                    <p className="text-lg font-black text-gray-700">{isGuestUser ? "ゲストは不可" : currentUser?.accept_requests ? "受付中" : "停止中"}</p>
-                    {isGuestUser && <p className="text-xs text-gray-400">ゲストユーザーは依頼の受信と承認はできません。</p>}
+                    <div className="pt-2 space-y-3">
+                      {dashboardItems.slice(0, 3).map(a => (
+                        <div key={a.id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="font-bold truncate">{format(parseISO(a.date), "M/d", { locale: ja })} {a.start_time}-{a.end_time}</p>
+                            <p className="text-xs text-gray-400 truncate">{a.note || statusLabel(a.status)}</p>
+                          </div>
+                          <span className="text-sm font-black text-gray-500">{a.status === "confirmed" ? "確" : "空"}</span>
+                        </div>
+                      ))}
+                    </div>
                   </Card>
                 </div>
 
@@ -1789,6 +1773,16 @@ export default function App() {
                         </Button>
                       </div>
                     )}
+                  </section>
+
+                  <section className="space-y-4 pt-8 border-t border-gray-100">
+                    <h3 className="text-xl font-black flex items-center gap-3">
+                      <LogOut size={24} className="text-blue-600" />
+                      サインアウト
+                    </h3>
+                    <Button onClick={() => signOut(auth)} variant="danger" className="w-full" icon={LogOut}>
+                      サインアウト
+                    </Button>
                   </section>
                 </Card>
               </motion.div>
