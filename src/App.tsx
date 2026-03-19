@@ -1216,7 +1216,7 @@ export default function App() {
                 <div className="w-4 h-0.5 bg-current rounded-full" />
               </div>
             </button>
-            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden w-14 h-14 shrink-0" />
+            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden w-16 h-16 shrink-0" />
             <h2 className="hidden lg:block text-sm font-bold text-gray-400 uppercase tracking-widest">
               {view === "dashboard" ? "Overview" : view === "calendar" ? "Schedule" : "Preferences"}
             </h2>
