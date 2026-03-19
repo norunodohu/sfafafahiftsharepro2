@@ -344,18 +344,17 @@ export default function App() {
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const confirmedCount = availabilities.filter(a => a.status === "confirmed").length;
   const requestCount = incomingRequests.length;
-  const openCount = availabilities.filter(a => a.status === "open").length;
   const today = new Date();
   const nextFiveDays = Array.from({ length: 5 }, (_, i) => addDays(today, i));
   const dashboardItems = {
     confirmed: availabilities.filter(a => a.status === "confirmed"),
     requests: incomingRequests,
-    open: availabilities.filter(a => a.status === "open"),
     all: availabilities,
   }[dashboardTab];
   const availableItemsForDay = (day: Date) =>
     availabilities
       .filter(a => isSameDay(parseISO(a.date), day))
+      .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
       .sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
   const openAvailabilityModal = (availability?: Availability, targetDate?: Date) => {
     if (availability) {
@@ -1237,7 +1236,7 @@ export default function App() {
                 <div className="w-4 h-0.5 bg-current rounded-full" />
               </div>
             </button>
-            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden w-16 h-16 shrink-0" />
+            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden h-10 w-auto shrink-0" />
             <h2 className="hidden lg:block text-sm font-bold text-gray-400 uppercase tracking-widest">
               {view === "dashboard" ? "Overview" : view === "calendar" ? "Schedule" : "Preferences"}
             </h2>
@@ -1325,8 +1324,7 @@ export default function App() {
                       {[
                         { id: "confirmed", label: `確定（${confirmedCount}）`, icon: Check },
                         { id: "requests", label: `リクエスト（${requestCount}）`, icon: Clock },
-                        { id: "open", label: `空き（${openCount}）`, icon: Calendar },
-                        { id: "all", label: `全て（${availabilities.length}）`, icon: Settings },
+                        { id: "all", label: `まとめて（${availabilities.length}）`, icon: Settings },
                       ].map(tab => (
                         <button
                           key={tab.id}
@@ -1398,6 +1396,28 @@ export default function App() {
                     })}
                   </div>
                 </div>
+
+                {dashboardTab !== "all" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xl font-black">{dashboardTab === "confirmed" ? "確定" : "リクエスト"}</h3>
+                      <span className="text-sm text-gray-400 font-bold">{dashboardItems.length}件</span>
+                    </div>
+                    <div className="space-y-3">
+                      {dashboardItems.length > 0 ? dashboardItems.slice(0, 5).map(a => (
+                        <div key={a.id} className="p-4 rounded-2xl bg-gray-50 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-bold truncate">{format(parseISO(a.date), "M月d日(E)", { locale: ja })} {a.start_time}-{a.end_time}</p>
+                            <p className="text-xs text-gray-400 truncate">{a.note || statusLabel(a.status)}</p>
+                          </div>
+                          <span className="text-sm font-black text-gray-500">{a.status === "confirmed" ? "確" : "空"}</span>
+                        </div>
+                      )) : (
+                        <p className="text-sm text-gray-400">データがありません</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {incomingRequests.length > 0 && (
                   <div className="space-y-4" ref={requestSectionRef}>
