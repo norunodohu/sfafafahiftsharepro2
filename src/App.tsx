@@ -10,6 +10,7 @@ import {
   LogOut, 
   User, 
   Users,
+  CalendarDays,
   Check, 
   X, 
   MessageCircle, 
@@ -18,7 +19,9 @@ import {
   Pencil,
   Eye,
   Link2,
-  Repeat2
+  Repeat2,
+  Copy,
+  RefreshCcw
 } from "lucide-react";
 import { 
   initializeApp 
@@ -1663,6 +1666,99 @@ export default function App() {
                           })}
                         </div>
                       </div>
+                    </div>
+                  )}
+                </Card>
+              </motion.div>
+            )}
+
+            {view === "friends" && (
+              <motion.div
+                key="friends"
+                initial={false}
+                animate={false}
+                exit={false}
+                className="space-y-6 max-w-6xl"
+              >
+                <Card className="p-6 sm:p-8 space-y-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">招待リンク</p>
+                      <h3 className="text-xl font-black">フレンドにシェア</h3>
+                      <p className="text-sm text-gray-500">リンクを送れば予定を見せられます。トークやメールでそのまま貼り付けてください。</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={copyShareLink} className="whitespace-nowrap" icon={Copy}>
+                        リンクをコピー
+                      </Button>
+                      <Button onClick={handleRefreshShareToken} variant="outline" className="whitespace-nowrap" icon={RefreshCcw}>
+                        招待URLを更新
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl px-4 py-3 text-sm font-mono break-all text-gray-700">
+                    {shareLink || "ログインすると招待リンクが表示されます"}
+                  </div>
+                </Card>
+
+                <Card className="p-6 sm:p-8 space-y-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Friends</p>
+                      <h3 className="text-xl font-black">フレンド一覧</h3>
+                      <p className="text-sm text-gray-500">フォロー {connections.filter(c => c.user1_id === currentUser?.uid).length}件 / フォロワー {connections.filter(c => c.user2_id === currentUser?.uid).length}件</p>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      招待された人は自動でフォローになります
+                    </div>
+                  </div>
+
+                  {connectionUsers.length > 0 ? (
+                    <div className="grid gap-3 sm:gap-4">
+                      {connectionUsers.map(peer => {
+                        const relation = connections.find(c =>
+                          (c.user1_id === currentUser?.uid && c.user2_id === peer.uid) ||
+                          (c.user2_id === currentUser?.uid && c.user1_id === peer.uid)
+                        );
+                        const isFollowing = relation?.user1_id === currentUser?.uid;
+                        const isFollower = relation?.user2_id === currentUser?.uid;
+                        return (
+                          <div
+                            key={peer.uid}
+                            className="p-4 sm:p-5 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between gap-3 flex-wrap"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-12 h-12 rounded-full overflow-hidden bg-white">
+                                <img
+                                  src={peer.avatar_url || peer.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${peer.name}`}
+                                  alt={peer.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold truncate">{peer.name}</p>
+                                <p className="text-xs text-gray-400 truncate">
+                                  {isFollowing && "フォロー中"}{isFollowing && isFollower ? " / " : ""}{isFollower && "フォロワー"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                onClick={() => window.location.href = `${window.location.origin}?share=${peer.share_token}`}
+                                variant="outline"
+                                className="whitespace-nowrap"
+                                icon={CalendarDays}
+                              >
+                                予定を開く
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-10 text-center text-gray-400 font-bold bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                      フレンドがまだいません。招待リンクを送ってみましょう。
                     </div>
                   )}
                 </Card>
