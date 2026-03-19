@@ -4,6 +4,7 @@ import path from "path";
 import axios from "axios";
 import cors from "cors";
 import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { fileURLToPath } from 'url';
@@ -16,6 +17,7 @@ path.dirname(__filename);
 const app = express();
 export default app; // Export for Vercel
 const PORT = 3000;
+const emailCodeStore = new Map<string, { code: string; expiresAt: number; email: string; name: string }>();
 
 const adminProjectId = process.env.FIREBASE_PROJECT_ID;
 const adminClientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -42,6 +44,22 @@ const mintLineCustomToken = async (profile: { userId: string; displayName: strin
 app.use(cors());
 app.use(express.json());
 
+const createEmailTransporter = () => {
+  const host = process.env.SMTP_HOST?.trim();
+  const port = Number(process.env.SMTP_PORT || "");
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS?.trim();
+
+  if (!host || !port || !user || !pass) return null;
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  });
+};
+
 // Start listening immediately to avoid platform timeouts
 if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
   app.listen(PORT, "0.0.0.0", () => {
@@ -54,8 +72,68 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", env: { 
     hasClientId: !!process.env.LINE_CLIENT_ID,
     hasClientSecret: !!process.env.LINE_CLIENT_SECRET,
+    hasSmtp: !!(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS),
     appUrl: process.env.APP_URL || "not set"
   }});
+});
+
+app.post("/api/auth/email-code/send", async (req, res) => {
+  try {
+    const email = String(req.body?.email || "").trim();
+    const name = String(req.body?.name || "").trim();
+    if (!email || !name) {
+      return res.status(400).json({ success: false, error: "email and name are required" });
+    }
+
+    const transporter = createEmailTransporter();
+    if (!transporter) {
+      return res.status(503).json({ success: false, error: "SMTP not configured" });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    emailCodeStore.set(email.toLowerCase(), {
+      code,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      email,
+      name,
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: email,
+      subject: "ChoiCrew 登録確認コード",
+      text: `${name}さん\n\nChoiCrewの確認コードは ${code} です。\n10分以内に入力してください。`,
+    });
+
+    res.json({ success: true });
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    console.error("Email code send error:", err.message || error);
+    res.status(500).json({ success: false, error: "failed to send code" });
+  }
+});
+
+app.post("/api/auth/email-code/verify", (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const code = String(req.body?.code || "").trim();
+  if (!email || !code) {
+    return res.status(400).json({ success: false, error: "email and code are required" });
+  }
+
+  const entry = emailCodeStore.get(email);
+  if (!entry) {
+    return res.status(400).json({ success: false, error: "code not found" });
+  }
+  if (entry.expiresAt < Date.now()) {
+    emailCodeStore.delete(email);
+    return res.status(400).json({ success: false, error: "code expired" });
+  }
+  if (entry.code !== code) {
+    return res.status(400).json({ success: false, error: "code mismatch" });
+  }
+
+  emailCodeStore.delete(email);
+  res.json({ success: true });
 });
 
 // LINE Auth Routes
