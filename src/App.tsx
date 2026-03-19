@@ -1154,7 +1154,7 @@ export default function App() {
                     {isOwnPreview ? (
                       <Button variant="outline" disabled>プレビュー中</Button>
                     ) : isLoggedIn ? (
-                      <Button onClick={() => handleSendRequest(a)} variant="outline">依頼する</Button>
+                      <Button onClick={() => openRequestModal(a)} variant="outline">依頼する</Button>
                     ) : (
                       <Button onClick={() => alert("依頼を送るにはログインが必要です。") } variant="outline">依頼する</Button>
                     )}
@@ -1323,10 +1323,10 @@ export default function App() {
                   <Card className="p-4 sm:p-8 space-y-4">
                     <div className="flex flex-wrap gap-2">
                       {[
-                        { id: "confirmed", label: `確定件数（${confirmedCount}）`, icon: Check },
-                        { id: "requests", label: `依頼件数（${requestCount}）`, icon: Clock },
+                        { id: "confirmed", label: `確定（${confirmedCount}）`, icon: Check },
+                        { id: "requests", label: `リクエスト（${requestCount}）`, icon: Clock },
                         { id: "open", label: `空き（${openCount}）`, icon: Calendar },
-                        { id: "all", label: `すべて（${availabilities.length}）`, icon: Settings },
+                        { id: "all", label: `全て（${availabilities.length}）`, icon: Settings },
                       ].map(tab => (
                         <button
                           key={tab.id}
@@ -1345,7 +1345,7 @@ export default function App() {
                             <p className="font-bold truncate">{format(parseISO(a.date), "M/d", { locale: ja })} {a.start_time}-{a.end_time}</p>
                             <p className="text-xs text-gray-400 truncate">{a.note || statusLabel(a.status)}</p>
                           </div>
-                          <span className="text-sm font-black text-gray-500">{a.status === "confirmed" ? "確" : "空"}</span>
+                          <span className={`text-sm font-black ${a.status === "confirmed" ? "text-red-500" : "text-gray-500"}`}>{a.status === "confirmed" ? "確" : "空"}</span>
                         </div>
                       ))}
                     </div>
@@ -1358,10 +1358,51 @@ export default function App() {
                   </Card>
                 )}
 
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-2xl font-black tracking-tight">今日の予定</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {nextFiveDays.map(day => {
+                      const items = availableItemsForDay(day);
+                      return (
+                        <Card key={day.toISOString()} className="p-4 sm:p-5">
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <div>
+                              <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                                {format(day, "M月d日(E)", { locale: ja })}
+                              </p>
+                              <p className="text-xs text-gray-400">{day.toDateString()}</p>
+                            </div>
+                            <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs">
+                              予定の登録
+                            </Button>
+                          </div>
+                          {items.length > 0 ? (
+                            <div className="space-y-2">
+                              {items.map(item => (
+                                <div key={item.id} className="flex items-center justify-between rounded-2xl bg-gray-50 px-3 py-2">
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-sm truncate">{item.start_time}-{item.end_time}</p>
+                                    <p className="text-[11px] text-gray-400 truncate">{item.note || statusLabel(item.status)}</p>
+                                  </div>
+                                  <span className={`text-sm font-black ${item.status === "confirmed" ? "text-red-500" : "text-gray-500"}`}>{item.status === "confirmed" ? "確" : "空"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-400">予定の登録なし</p>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {incomingRequests.length > 0 && (
                   <div className="space-y-4" ref={requestSectionRef}>
                     <div className="flex items-center justify-between">
-                      依頼の受信
+                      <h3 className="text-xl font-black">リクエスト</h3>
                       <span className="text-sm text-gray-400 font-bold">{incomingRequests.length}件</span>
                     </div>
                     <div className="grid gap-4">
@@ -1369,82 +1410,24 @@ export default function App() {
                         <Card key={request.id} className="p-6 space-y-4">
                           <div className="flex items-start justify-between gap-4">
                             <div>
-                              <p className="text-lg font-black">{request.date} {request.start_time}-{request.end_time}</p>
-                              <p className="text-sm text-gray-400 font-medium">{request.manager_name}さんからの依頼</p>
+                              <p className="text-lg font-black">{format(parseISO(request.date), "M月d日(E)", { locale: ja })}</p>
+                              <p className="text-sm text-gray-400 font-medium">{request.manager_name}さんから</p>
+                              <p className="text-sm font-bold">{request.requested_start_time || request.start_time}-{request.requested_end_time || request.end_time}</p>
+                              {(request.requested_start_time && request.requested_start_time !== request.start_time) && (
+                                <p className="text-xs text-blue-600 font-semibold">時間変更でリクエストを受けています</p>
+                              )}
                             </div>
                             <span className="px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-xs font-black">承認待ち</span>
                           </div>
                           <div className="flex gap-3">
                             <Button onClick={() => handleApproveRequest(request)} className="flex-1" icon={Check}>承認</Button>
-                            <Button onClick={() => handleRejectRequest(request)} variant="outline" className="flex-1" icon={X}>削除</Button>
+                            <Button onClick={() => handleRejectRequest(request)} variant="outline" className="flex-1" icon={X}>辞退</Button>
                           </div>
                         </Card>
                       ))}
                     </div>
                   </div>
                 )}
-
-                {/* Today's Schedule */}
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-2xl font-black tracking-tight">今日の予定</h3>
-                    <div className="flex gap-2">
-                      {[0, 1, 2].map(offset => (
-                        <button 
-                          key={offset}
-                          onClick={() => setDashboardDateOffset(offset)}
-                          className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${dashboardDateOffset === offset ? "bg-gray-900 text-white" : "bg-white text-gray-400 border border-gray-100"}`}
-                        >
-                          {offset === 0 ? `今日 ${format(new Date(), "M月d日(E)", { locale: ja })}` : offset === 1 ? `明日 ${format(addDays(new Date(), 1), "M月d日(E)", { locale: ja })}` : `${format(addDays(new Date(), offset), "M月d日(E)", { locale: ja })}`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4">
-                    {availabilities
-                      .filter(a => isSameDay(parseISO(a.date), addDays(new Date(), dashboardDateOffset)))
-                      .length > 0 ? (
-                        availabilities
-                          .filter(a => isSameDay(parseISO(a.date), addDays(new Date(), dashboardDateOffset)))
-                          .map(a => (
-                            <Card key={a.id} className="p-6 flex items-center justify-between group">
-                              <div className="flex items-center gap-6">
-                                <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center ${
-                                  a.status === "confirmed" ? "bg-red-50 text-red-600" : 
-                                  a.status === "pending" ? "bg-orange-50 text-orange-600" : 
-                                  a.status === "busy" ? "bg-red-900/10 text-red-900" : "bg-blue-50 text-blue-600"
-                                }`}>
-                                  <Clock size={20} />
-                                </div>
-                                <div>
-                                  <p className="text-xl font-black">{a.start_time} - {a.end_time}</p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <span className={`w-2 h-2 rounded-full ${
-                                      a.status === "confirmed" ? "bg-red-500" : 
-                                      a.status === "pending" ? "bg-orange-500" : 
-                                      a.status === "busy" ? "bg-red-900" : "bg-blue-500"
-                                    }`}></span>
-                                  <p className="text-sm font-bold text-gray-400 uppercase tracking-wider">
-                                    {statusLabel(a.status)}
-                                  </p>
-                                    {a.note && <span className="text-xs text-gray-300 font-medium ml-2">| {a.note}</span>}
-                                  </div>
-                                </div>
-                              </div>
-                            </Card>
-                          ))
-                      ) : (
-                        <div className="py-12 text-center space-y-4 bg-white rounded-3xl border border-dashed border-gray-200">
-                          <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto text-gray-300">
-                            <Calendar size={32} />
-                          </div>
-                          <p className="text-gray-400 font-bold">予定がありません</p>
-                          <Button onClick={() => openAvailabilityModal()} variant="outline" icon={Plus}>予定を追加する</Button>
-                        </div>
-                      )}
-                  </div>
-                </div>
               </motion.div>
             )}
 
@@ -1831,6 +1814,58 @@ export default function App() {
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {showRequestModal && requestTarget && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowRequestModal(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={false}
+              animate={false}
+              exit={false}
+              className="relative w-full max-w-lg bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-black">依頼</h3>
+                <button onClick={() => setShowRequestModal(false)} className="p-2 rounded-full hover:bg-gray-100"><X size={18} /></button>
+              </div>
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-gray-50 p-4">
+                  <p className="font-bold">{format(parseISO(requestTarget.date), "M月d日(E)", { locale: ja })}</p>
+                  <p className="text-sm text-gray-500">{requestTarget.start_time}-{requestTarget.end_time}</p>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">依頼時間</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="time" value={requestStart} onChange={e => setRequestStart(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold" />
+                    <input type="time" value={requestEnd} onChange={e => setRequestEnd(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold" />
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    className="flex-1"
+                    onClick={async () => {
+                      await handleSendRequest(requestTarget, requestStart, requestEnd);
+                      setShowRequestModal(false);
+                    }}
+                  >
+                    送信
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setShowRequestModal(false)}>
+                    キャンセル
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Add Modal */}
       <AnimatePresence>
