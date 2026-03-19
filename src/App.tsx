@@ -534,7 +534,7 @@ export default function App() {
         const updatedProfile = {
           ...existingData,
           uid: firebaseUser.uid,
-          name: profile.displayName || existingData.name,
+          name: existingData.name || profile.displayName || "User",
           line_user_id: profile.userId,
           line_picture: profile.pictureUrl,
           avatar_url: existingData.avatar_url,
@@ -544,7 +544,7 @@ export default function App() {
           line_user_id: profile.userId,
           line_picture: profile.pictureUrl,
           notification_pref: "line",
-          name: updatedProfile.name
+          name: existingData.name || profile.displayName || "User"
         });
         setCurrentUser(updatedProfile);
       } else {
@@ -1403,6 +1403,11 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                <Card className="p-5 bg-blue-50 border-blue-100">
+                  <p className="text-sm font-black text-blue-700">ワンポイント</p>
+                  <p className="text-sm text-blue-700 mt-1">予定を共有すると、相手はあなたの空き時間を見て依頼できます。迷ったらまず共有リンクをコピーしておくと便利です。</p>
+                </Card>
               </motion.div>
             )}
 
@@ -1418,7 +1423,7 @@ export default function App() {
                   <div className="flex items-start justify-between mb-4 sm:mb-8 gap-3">
                     <div className="min-w-0">
                       <div className="text-[10px] sm:hidden font-black text-gray-400 leading-none">{format(selectedDate, "yyyy年", { locale: ja })}</div>
-                      <h3 className="text-2xl font-black leading-none">{calendarMode === "week" ? format(selectedDate, "M月", { locale: ja }) : format(selectedDate, "yyyy年M月", { locale: ja })}</h3>
+                      <h3 className="text-xl sm:text-2xl font-black leading-none">{calendarMode === "week" ? format(selectedDate, "M月", { locale: ja }) : format(selectedDate, "yyyy年M月", { locale: ja })}</h3>
                     </div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => setCalendarMode("week")} className={`p-3 rounded-xl ${calendarMode === "week" ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-500"}`}>
@@ -1440,7 +1445,6 @@ export default function App() {
                       const isSat = d === "土";
                       return (
                         <div key={d} className={`relative text-center font-black uppercase pb-1 sm:pb-4 ${isSun ? "text-red-500" : isSat ? "text-blue-500" : "text-gray-900"}`}>
-                          <div className="h-[2px] w-full bg-blue-500 rounded-full mb-1" />
                           {d}
                         </div>
                       );
@@ -1481,11 +1485,10 @@ export default function App() {
                         <button 
                           key={day.toString()}
                           onClick={() => setSelectedDate(day)}
-                          className={`rounded-2xl flex flex-col items-center justify-start transition-all relative ${calendarMode === "week" ? "h-16 sm:h-20 px-1 py-1" : "aspect-square justify-center gap-1"} ${isSelected ? "bg-blue-600 text-white shadow-xl shadow-blue-200" : "hover:bg-gray-50"}`}
+                          className={`rounded-2xl flex flex-col items-center justify-start transition-all relative ${calendarMode === "week" ? "h-10 sm:h-14 px-1 py-0.5" : "aspect-square justify-center gap-1"} ${isSelected ? "bg-blue-600 text-white shadow-xl shadow-blue-200" : "hover:bg-gray-50"}`}
                         >
                           <div className="w-full flex items-center justify-between">
                             <span className={`text-lg sm:text-xl font-black ${isToday && !isSelected ? "text-blue-600" : ""}`}>{format(day, "d")}</span>
-                            {isToday && <span className="w-2 h-2 rounded-full bg-blue-500" />}
                           </div>
                           <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1">
                             {dayAvails.slice(0, 3).map((a, idx) => (
@@ -1548,34 +1551,34 @@ export default function App() {
 
                   <div className="space-y-4 pt-2">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-lg font-black">1か月分の予定</h3>
-                      <button
-                        onClick={() => setShowPastCalendarItems(v => !v)}
-                        className="text-sm font-bold text-blue-600 hover:underline"
-                      >
-                        {showPastCalendarItems ? "過去分を隠す" : "過去分を表示"}
-                      </button>
+                      <h3 className="text-lg font-black">ちょい先の予定</h3>
                     </div>
                     <div className="space-y-3">
-                      {(showPastCalendarItems ? monthlyAvailabilities : monthlyAvailabilities.filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))).map(a => (
-                        <Card key={a.id} className="p-4 flex items-center justify-between">
-                          <div>
-                            <p className="font-black">{format(parseISO(a.date), "M/d (E)", { locale: ja })}</p>
-                            <p className="text-sm text-gray-500">{a.start_time} - {a.end_time}</p>
+                      {Array.from({ length: 3 }, (_, i) => addDays(new Date(), i + 1)).map(day => {
+                        const dayItems = availabilities
+                          .filter(a => isSameDay(parseISO(a.date), day))
+                          .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
+                          .sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
+                        return (
+                          <div key={day.toISOString()} className="pt-3 border-t border-gray-100 first:border-t-0 first:pt-0">
+                            <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                              {format(day, "M月d日(E)", { locale: ja })}
+                            </p>
+                            {dayItems.length > 0 ? (
+                              <div className="mt-2 space-y-2">
+                                {dayItems.map(a => (
+                                  <div key={a.id} className="flex items-center justify-between">
+                                    <p className="text-sm text-gray-600">{a.start_time} - {a.end_time}</p>
+                                    <span className={`text-xs font-black ${a.status === "confirmed" ? "text-red-500" : "text-gray-400"}`}>{a.status === "confirmed" ? "確" : "空"}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-400 mt-2">予定の登録なし</p>
+                            )}
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className={`text-2xl font-black ${a.status === "confirmed" ? "text-red-500" : "text-gray-400"}`}>
-                              {a.status === "confirmed" ? "確" : "空"}
-                            </span>
-                            <button
-                              onClick={() => a.status === "confirmed" ? alert("確定済みの予定は変更できません。") : openAvailabilityModal(a)}
-                              className={`p-2 rounded-xl text-gray-400 ${a.status === "confirmed" ? "opacity-40" : "hover:bg-gray-100"}`}
-                            >
-                              <Pencil size={16} />
-                            </button>
-                          </div>
-                        </Card>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
