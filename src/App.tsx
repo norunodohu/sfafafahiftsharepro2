@@ -334,6 +334,7 @@ export default function App() {
   const isGuestUser = !currentUser?.email && !currentUser?.line_user_id;
   const accountLabel = isGuestUser ? "ゲストユーザー" : "クルー";
   const shareLink = currentUser ? `${window.location.origin}?share=${currentUser.share_token}` : "";
+  const sharePeriodLabel = currentUser?.share_period_days === 14 ? "2週間" : currentUser?.share_period_days === 30 ? "1か月" : "1週間";
   const avatarSrc = currentUser?.avatar_url || currentUser?.line_picture || "";
   const avatarIsGuestDefault = isGuestUser && !currentUser?.avatar_url && !currentUser?.line_picture;
   const isOwnPreview = isPublicView && Boolean(currentUser?.uid && publicUser?.uid && currentUser.uid === publicUser.uid);
@@ -372,6 +373,9 @@ export default function App() {
   const displayedAvailabilities = [...availabilities, ...templateAvailabilities].sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const nextFiveDays = Array.from({ length: 5 }, (_, i) => addDays(today, i));
   const scheduleListDays = Array.from({ length: 14 }, (_, i) => addDays(today, i));
+  const publicUpcomingAvailabilities = availabilities
+    .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
+    .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const openAvailabilityModal = (availability?: Availability, targetDate?: Date) => {
     if (availability) {
       setEditingAvailability(availability);
@@ -1084,17 +1088,38 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] p-6 lg:p-12">
         <div className="max-w-2xl mx-auto space-y-8">
-          <div className="flex items-center gap-6">
+          <div className="space-y-4">
             <img
               src={CHOICREW_LOGO}
               alt="ChoiCrew logo"
               className="w-28 shrink-0 drop-shadow-[0_18px_32px_rgba(37,99,235,0.14)]"
             />
-              <div>
+            <div>
+              <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-black tracking-tight">{publicUser.name}さんの予定</h1>
-                <p className="text-gray-500 font-medium">空き時間を確認して、依頼を送れます。</p>
-                <p className="text-sm text-red-500 font-semibold">共有URLでは、本人の共有期間は1週間として表示されています。</p>
+                {isOwnPreview && (
+                  <button
+                    onClick={async () => {
+                      if (!currentUser) return;
+                      const nextName = window.prompt("アカウントの名前を変更しますか？", currentUser.name);
+                      if (nextName === null) return;
+                      const trimmed = nextName.trim();
+                      if (!trimmed) return;
+                      await setDoc(doc(db, "users", currentUser.uid), { name: trimmed }, { merge: true });
+                      setCurrentUser({ ...currentUser, name: trimmed });
+                      setNewName(trimmed);
+                      setPublicUser({ ...publicUser, name: trimmed });
+                    }}
+                    className="p-2 rounded-full hover:bg-blue-50 text-blue-600"
+                    aria-label="名前を編集"
+                  >
+                    <Pencil size={18} />
+                  </button>
+                )}
               </div>
+              <p className="text-gray-500 font-medium">空き時間を確認して、依頼を送れます。</p>
+              <p className="text-sm text-red-500 font-semibold">共有URLでは、共有期間は{sharePeriodLabel}として表示されています。</p>
+            </div>
           </div>
 
           {isOwnPreview && (
@@ -1106,9 +1131,20 @@ export default function App() {
           <div className="space-y-4">
             <h3 className="text-xl font-black">公開中の空き時間</h3>
             <div className="grid gap-4">
-              {displayedAvailabilities.length > 0 ? (
-                displayedAvailabilities.map(a => (
-                  <Card key={a.id} className="p-6 flex items-center justify-between">
+              {publicUpcomingAvailabilities.length > 0 ? (
+                publicUpcomingAvailabilities.map(a => {
+                  const req = requests.find(r => r.availability_id === a.id && r.staff_id === currentUser?.uid);
+                  const isBusy = a.status === "confirmed" || a.status === "busy";
+                  const isMyRequest = Boolean(req);
+                  const buttonLabel = isBusy
+                    ? "依頼"
+                    : isMyRequest && req?.status === "approved"
+                      ? "キャンセル依頼"
+                      : isMyRequest
+                        ? "依頼中"
+                        : "依頼";
+                  return (
+                  <Card key={a.id} className={`p-6 flex items-center justify-between ${isBusy ? "opacity-55 grayscale" : ""}`}>
                     <div className="flex items-center gap-6">
                       <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
                         <Clock size={24} />
@@ -1117,22 +1153,42 @@ export default function App() {
                         <p className="text-lg font-bold">{format(parseISO(a.date), "M月d日 (E)", { locale: ja })}</p>
                         <p className="text-2xl font-black">{a.start_time} - {a.end_time}</p>
                         {a.note && <p className="text-sm text-red-500 font-semibold mt-1">{a.note}</p>}
+                        {isBusy && <p className="text-xs text-gray-400 mt-1">埋まっている予定のため、依頼はできません。</p>}
+                        {isMyRequest && req?.status === "pending" && <p className="text-xs text-blue-600 mt-1">依頼中です。</p>}
+                        {isMyRequest && req?.status === "approved" && <p className="text-xs text-amber-600 mt-1">承認済みです。キャンセル依頼は相手の同意が必要です。</p>}
                       </div>
                     </div>
-                    {isOwnPreview ? (
-                      <button
-                        onClick={() => alert("これはプレビューなので、依頼ができませんが、現在依頼を受け付けている予定です。")}
-                        className="px-5 py-3 rounded-2xl border border-blue-100 text-blue-300 bg-blue-50 font-black"
-                      >
-                        依頼
-                      </button>
-                    ) : isLoggedIn ? (
-                      <Button onClick={() => openRequestModal(a)} variant="outline" className="opacity-70">依頼</Button>
-                    ) : (
-                      <Button onClick={() => alert("依頼を送るにはログインが必要です。") } variant="outline" className="opacity-70">依頼</Button>
-                    )}
+                    <button
+                      onClick={async () => {
+                        if (isBusy) {
+                          alert("これはプレビューなので、依頼ができませんが、現在依頼を受け付けている予定です。");
+                          return;
+                        }
+                        if (isOwnPreview) {
+                          alert("これはプレビューなので、依頼ができませんが、現在依頼を受け付けている予定です。");
+                          return;
+                        }
+                        if (!isLoggedIn) {
+                          alert("依頼を送るにはログインが必要です。");
+                          return;
+                        }
+                        if (isMyRequest && req?.status === "pending") {
+                          if (window.confirm("キャンセルしますか？")) await handleRejectRequest(req as ShiftRequest);
+                          return;
+                        }
+                        if (isMyRequest && req?.status === "approved") {
+                          if (window.confirm("キャンセル依頼しますか？")) await handleRejectRequest(req as ShiftRequest);
+                          return;
+                        }
+                        openRequestModal(a);
+                      }}
+                      className={`px-5 py-3 rounded-2xl font-black border ${isBusy || isOwnPreview ? "border-blue-100 text-blue-300 bg-blue-50" : "border-blue-200 text-blue-600 bg-white"}`}
+                    >
+                      {buttonLabel}
+                    </button>
                   </Card>
-                ))
+                  );
+                })
               ) : (
                 <div className="py-12 text-center bg-white rounded-3xl border border-dashed border-gray-200 text-gray-400 font-bold">
                   予定はまだありません
@@ -1140,6 +1196,20 @@ export default function App() {
               )}
             </div>
           </div>
+
+          <Card className="p-5 bg-blue-50 border-blue-100">
+            <p className="text-sm font-black text-blue-700">使い方</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-blue-700">
+              <span className="px-3 py-2 rounded-full bg-white border border-blue-100">共有リンクを見る</span>
+              <span>→</span>
+              <span className="px-3 py-2 rounded-full bg-white border border-blue-100">空き時間を確認</span>
+              <span>→</span>
+              <span className="px-3 py-2 rounded-full bg-white border border-blue-100">依頼 / 依頼中</span>
+              <span>→</span>
+              <span className="px-3 py-2 rounded-full bg-white border border-blue-100">承認 / キャンセル依頼</span>
+            </div>
+            <p className="text-xs text-blue-700 mt-3">埋まっている予定はグレーで表示され、依頼できないものは押せません。</p>
+          </Card>
 
           {!isLoggedIn && (
             <div className="pt-8 border-t border-gray-100 text-center">
