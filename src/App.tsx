@@ -30,6 +30,7 @@ import {
   getAuth, 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -908,19 +909,39 @@ export default function App() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const sourceUid = auth.currentUser?.uid;
-      const result = await signInWithPopup(auth, provider);
-      if (sourceUid && sourceUid !== result.user.uid) {
-        await migrateUserData(sourceUid, result.user.uid);
-        try {
-          await deleteDoc(doc(db, "users", sourceUid));
-        } catch (cleanupError) {
-          console.warn("Old user cleanup skipped:", cleanupError);
+      try {
+        const result = await signInWithPopup(auth, provider);
+        if (sourceUid && sourceUid !== result.user.uid) {
+          await migrateUserData(sourceUid, result.user.uid);
+          try {
+            await deleteDoc(doc(db, "users", sourceUid));
+          } catch (cleanupError) {
+            console.warn("Old user cleanup skipped:", cleanupError);
+          }
+        }
+        alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
+      } catch (linkError: unknown) {
+        const code = (linkError as { code?: string })?.code;
+        if (code === "auth/credential-already-in-use") {
+          const credential = GoogleAuthProvider.credentialFromError(linkError as Error);
+          if (!credential) throw linkError;
+          const result = await signInWithCredential(auth, credential);
+          if (sourceUid && sourceUid !== result.user.uid) {
+            await migrateUserData(sourceUid, result.user.uid);
+            try {
+              await deleteDoc(doc(db, "users", sourceUid));
+            } catch (cleanupError) {
+              console.warn("Old user cleanup skipped:", cleanupError);
+            }
+          }
+          alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
+        } else {
+          throw linkError;
         }
       }
-      alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
     } catch (err) {
       console.error("Google login error:", err);
-      alert("Google連携に失敗しました。アカウント選択や既存連携の状態を確認してください。");
+      alert("Google連携に失敗しました。別アカウントに既に連携済みの可能性があります。");
     }
   };
   const handleEmailAuth = async () => {
