@@ -36,8 +36,7 @@ import {
   GoogleAuthProvider, 
   signOut, 
   signInWithCustomToken,
-  unlink,
-  linkWithPopup
+  unlink
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -908,32 +907,20 @@ export default function App() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
-      if (auth.currentUser) {
-        const sourceUid = auth.currentUser.uid;
+      const sourceUid = auth.currentUser?.uid;
+      const result = await signInWithPopup(auth, provider);
+      if (sourceUid && sourceUid !== result.user.uid) {
+        await migrateUserData(sourceUid, result.user.uid);
         try {
-          const result = await linkWithPopup(auth.currentUser, provider);
-          alert(`Google連携中になりました。\n統合先: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
-        } catch (linkError: unknown) {
-          const code = (linkError as { code?: string })?.code;
-          if (code === "auth/credential-already-in-use") {
-            const shouldSwitch = window.confirm("そのGoogleアカウントは既に別アカウントに連携されています。そちらへ切り替えて今のデータを統合しますか？");
-            if (!shouldSwitch) return;
-            const result = await signInWithPopup(auth, provider);
-            if (sourceUid !== result.user.uid) {
-              await migrateUserData(sourceUid, result.user.uid);
-            }
-            alert(`Google連携中になりました。\n統合先: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
-          } else {
-            throw linkError;
-          }
+          await deleteDoc(doc(db, "users", sourceUid));
+        } catch (cleanupError) {
+          console.warn("Old user cleanup skipped:", cleanupError);
         }
-      } else {
-        const result = await signInWithPopup(auth, provider);
-        alert(`Googleでログインしました。\n${result.user.email || result.user.displayName || "Googleアカウント"}`);
       }
+      alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
     } catch (err) {
       console.error("Google login error:", err);
-      alert("Google連携に失敗しました。別アカウントに既に連携済みの可能性があります。");
+      alert("Google連携に失敗しました。アカウント選択や既存連携の状態を確認してください。");
     }
   };
   const handleEmailAuth = async () => {
