@@ -30,11 +30,11 @@ if (!getApps().length && adminProjectId && adminClientEmail && adminPrivateKey) 
   });
 }
 
-const mintLineCustomToken = async (profile: { userId: string; displayName: string; pictureUrl?: string }) => {
+const mintCustomToken = async (uid: string) => {
   if (!getApps().length) {
     throw new Error("Firebase Admin SDK is not configured");
   }
-  return getAdminAuth().createCustomToken(`line_${profile.userId}`);
+  return getAdminAuth().createCustomToken(uid);
 };
 
 app.use(cors());
@@ -222,9 +222,31 @@ app.post("/api/auth/line/firebase-token", async (req, res) => {
       return res.status(400).json({ error: "profile is required" });
     }
 
-    const customToken = await mintLineCustomToken(profile);
+    const customToken = await mintCustomToken(`line_${profile.userId}`);
     res.json({
       uid: `line_${profile.userId}`,
+      customToken,
+      debug: {
+        projectId: adminProjectId,
+        tokenPrefix: customToken.slice(0, 12),
+        tokenLength: customToken.length,
+      },
+    });
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    res.status(500).json({ error: err.message || "Failed to create custom token" });
+  }
+});
+
+app.post("/api/auth/google/firebase-token", async (req, res) => {
+  try {
+    const { uid } = req.body || {};
+    if (!uid || typeof uid !== "string") {
+      return res.status(400).json({ error: "uid is required" });
+    }
+    const customToken = await mintCustomToken(uid);
+    res.json({
+      uid,
       customToken,
       debug: {
         projectId: adminProjectId,

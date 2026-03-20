@@ -30,7 +30,6 @@ import {
   getAuth, 
   onAuthStateChanged, 
   signInWithPopup, 
-  signInWithCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
@@ -909,36 +908,39 @@ export default function App() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const sourceUid = auth.currentUser?.uid;
-      try {
-        const result = await signInWithPopup(auth, provider);
-        if (sourceUid && sourceUid !== result.user.uid) {
-          await migrateUserData(sourceUid, result.user.uid);
-          try {
-            await deleteDoc(doc(db, "users", sourceUid));
-          } catch (cleanupError) {
-            console.warn("Old user cleanup skipped:", cleanupError);
-          }
-        }
-        alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
-      } catch (linkError: unknown) {
-        const code = (linkError as { code?: string })?.code;
-        if (code === "auth/credential-already-in-use") {
-          const credential = GoogleAuthProvider.credentialFromError(linkError as Error);
-          if (!credential) throw linkError;
-          const result = await signInWithCredential(auth, credential);
-          if (sourceUid && sourceUid !== result.user.uid) {
-            await migrateUserData(sourceUid, result.user.uid);
-            try {
-              await deleteDoc(doc(db, "users", sourceUid));
-            } catch (cleanupError) {
-              console.warn("Old user cleanup skipped:", cleanupError);
-            }
-          }
-          alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
-        } else {
-          throw linkError;
+      const result = await signInWithPopup(auth, provider);
+      const googleEmail = result.user.email || "";
+      const matchingGoogleUser = googleEmail
+        ? await getDocs(query(collection(db, "users"), where("google_email", "==", googleEmail)))
+        : null;
+      const targetUid = sourceUid || (!matchingGoogleUser?.empty ? matchingGoogleUser.docs[0].data().uid : result.user.uid);
+
+      if (result.user.uid !== targetUid) {
+        await migrateUserData(result.user.uid, targetUid);
+        try {
+          await deleteDoc(doc(db, "users", result.user.uid));
+        } catch (cleanupError) {
+          console.warn("Google auth user cleanup skipped:", cleanupError);
         }
       }
+
+      const tokenRes = await fetch("/api/auth/google/firebase-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: targetUid }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || !tokenData.customToken) {
+        throw new Error(tokenData.error || "Failed to create google custom token");
+      }
+
+      await signInWithCustomToken(auth, tokenData.customToken);
+      await setDoc(doc(db, "users", targetUid), {
+        uid: targetUid,
+        google_email: googleEmail,
+      }, { merge: true });
+
+      alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
     } catch (err) {
       console.error("Google login error:", err);
       alert("Google連携に失敗しました。別アカウントに既に連携済みの可能性があります。");
