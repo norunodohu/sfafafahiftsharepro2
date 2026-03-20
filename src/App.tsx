@@ -2032,10 +2032,10 @@ export default function App() {
                           {isGoogleSignedIn ? "Google連携中" : "Google連携"}
                         </div>
                         <p className={`text-xs ${isGoogleSignedIn ? "text-emerald-600" : "text-gray-400"}`}>
-                          {isGoogleSignedIn ? "Googleログインは有効です。" : "Google連携を追加すると、LINE解除時もログインを維持できます。"}
+                          {isGoogleSignedIn ? "Google連携は有効です。" : "Google連携を追加すると、LINE解除時もログインを維持できます。"}
                         </p>
                         <Button onClick={isGoogleSignedIn ? handleUnlinkGoogle : handleGoogleLogin} variant={isGoogleSignedIn ? "ghost" : "outline"} className="w-full">
-                          {isGoogleSignedIn ? "Google連携中" : "Google連携"}
+                          {isGoogleSignedIn ? "Google連携を解除" : "Google連携"}
                         </Button>
                       </div>
                     </div>
