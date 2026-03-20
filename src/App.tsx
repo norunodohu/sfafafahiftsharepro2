@@ -35,7 +35,8 @@ import {
   updateProfile,
   GoogleAuthProvider, 
   signOut, 
-  signInWithCustomToken
+  signInWithCustomToken,
+  unlink
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -347,6 +348,8 @@ export default function App() {
   const bellRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
 
+  const isLineSignedIn = Boolean(auth.currentUser?.providerData.some(provider => provider.providerId === "oidc.line") || currentUser?.line_user_id);
+  const isGoogleSignedIn = Boolean(auth.currentUser?.providerData.some(provider => provider.providerId === "google.com"));
   const accountLabel = "クルー";
   const shareLink = currentUser ? `${window.location.origin}?share=${currentUser.share_token}` : "";
   const effectiveSharePeriodDays = publicUser?.share_period_days || currentUser?.share_period_days || 7;
@@ -515,23 +518,33 @@ export default function App() {
     return `${statusLine}${detailsLine}`;
   };
 
-  const handleTestLineNotification = async () => {
-    if (!currentUser) return;
-    const result = await sendLineNotification(
-      currentUser.line_user_id,
-      "ChoiCrewのLINE通知テストです。"
-    );
-    alert(`通知テスト結果\n${buildLineNotificationAlert(result)}`);
-  };
-
   const handleUnlinkLine = async () => {
     if (!currentUser) return;
+    if (!isGoogleSignedIn && currentUser.line_user_id) {
+      alert("LINE連携を解除するとログイン手段がなくなります。Google連携を先に追加してください。");
+      return;
+    }
     await updateDoc(doc(db, "users", currentUser.uid), {
       line_user_id: null,
       notification_pref: "none",
     });
     setCurrentUser({ ...currentUser, line_user_id: undefined, notification_pref: "none" });
-    alert("LINE連携を解除しました。ログインは引き続き利用できます。");
+    alert("LINE連携を解除しました。");
+  };
+
+  const handleUnlinkGoogle = async () => {
+    if (!auth.currentUser) return;
+    if (!isLineSignedIn && auth.currentUser.providerData.some(provider => provider.providerId === "google.com")) {
+      alert("Google連携を解除するとログイン手段がなくなります。LINE連携を先に追加してください。");
+      return;
+    }
+    try {
+      await unlink(auth.currentUser, "google.com");
+      alert("Google連携を解除しました。");
+    } catch (error) {
+      console.error("Google unlink error:", error);
+      alert("Google連携の解除に失敗しました。");
+    }
   };
 
   useEffect(() => {
@@ -1294,17 +1307,17 @@ export default function App() {
 
                 <div className="grid gap-4">
                   <Button onClick={handleLineLogin} variant="line" icon={MessageCircle} className="py-5 text-lg">
-                    LINEで続ける
+                    LINEでログイン
                   </Button>
                   <Button onClick={handleGoogleLogin} variant="outline" icon={User} className="py-5 text-lg">
-                    Googleで続ける
+                    Googleでログイン
                   </Button>
                 </div>
               </>
             )}
             {isLoggedIn && (
-              <p className="text-center text-gray-500 font-medium mt-4">すでにサインイン済みです。</p>
-            )}
+                <p className="text-center text-gray-500 font-medium mt-4">すでにサインイン済みです。</p>
+              )}
           </div>
 
           <p className="text-sm text-gray-400">
@@ -1992,26 +2005,30 @@ export default function App() {
                       ID/パスワードに加えて、LINEまたはGoogleでもサインインできます。どれで入っても同じアカウントに紐づきます。
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      {currentUser?.line_user_id ? (
-                        <div className="w-full py-4 px-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex flex-col gap-2 justify-center">
-                          <div className="flex items-center gap-2 text-emerald-700 font-bold">
-                            <Check size={18} />
-                            LINEサインイン済み / 通知連携済み
-                          </div>
-                          <p className="text-xs text-emerald-600">連携を解除してもログイン自体は継続できます。</p>
-                          <div className="flex gap-2">
-                            <Button onClick={handleTestLineNotification} variant="outline" className="flex-1 border-emerald-200 text-emerald-700">通知テスト</Button>
-                            <Button onClick={handleUnlinkLine} variant="ghost" className="flex-1 text-emerald-700">連携解除（通知のみオフ）</Button>
-                          </div>
+                      <div className={`w-full py-4 px-4 rounded-2xl border flex flex-col gap-2 justify-center ${isLineSignedIn ? "bg-emerald-50 border-emerald-100" : "bg-gray-50 border-gray-100"}`}>
+                        <div className={`flex items-center gap-2 font-bold ${isLineSignedIn ? "text-emerald-700" : "text-gray-500"}`}>
+                          <Check size={18} />
+                          {isLineSignedIn ? "LINEでログイン中" : "LINEでログイン"}
                         </div>
-                      ) : (
-                        <Button onClick={handleLineLogin} variant="line" icon={MessageCircle} className="w-full py-4">
-                          LINEでサインイン
+                        <p className={`text-xs ${isLineSignedIn ? "text-emerald-600" : "text-gray-400"}`}>
+                          {isLineSignedIn ? "連携を解除しても、別のログイン手段があれば継続できます。" : "LINEでログインすると通知連携ができます。"}
+                        </p>
+                        <Button onClick={isLineSignedIn ? handleUnlinkLine : handleLineLogin} variant={isLineSignedIn ? "ghost" : "line"} className="w-full">
+                          {isLineSignedIn ? "LINE連携を解除" : "LINEでログイン"}
                         </Button>
-                      )}
-                      <Button onClick={handleGoogleLogin} variant="outline" icon={User} className="w-full py-4">
-                        Googleでサインイン
-                      </Button>
+                      </div>
+                      <div className={`w-full py-4 px-4 rounded-2xl border flex flex-col gap-2 justify-center ${isGoogleSignedIn ? "bg-emerald-50 border-emerald-100" : "bg-gray-50 border-gray-100"}`}>
+                        <div className={`flex items-center gap-2 font-bold ${isGoogleSignedIn ? "text-emerald-700" : "text-gray-500"}`}>
+                          <User size={18} />
+                          {isGoogleSignedIn ? "Google連携中" : "Google連携"}
+                        </div>
+                        <p className={`text-xs ${isGoogleSignedIn ? "text-emerald-600" : "text-gray-400"}`}>
+                          {isGoogleSignedIn ? "Googleアカウントでのログインが使えます。" : "Google連携を追加すると、LINE解除時もログインを維持できます。"}
+                        </p>
+                        <Button onClick={isGoogleSignedIn ? handleUnlinkGoogle : handleGoogleLogin} variant={isGoogleSignedIn ? "ghost" : "outline"} className="w-full">
+                          {isGoogleSignedIn ? "Google連携中" : "Google連携"}
+                        </Button>
+                      </div>
                     </div>
                   </section>
 
