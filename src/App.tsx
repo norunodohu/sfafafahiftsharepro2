@@ -705,6 +705,7 @@ export default function App() {
     if (lineUserParam && lineUserParam !== "undefined") {
       try {
         processLineProfile(JSON.parse(decodeURIComponent(lineUserParam)));
+        window.history.replaceState({}, document.title, window.location.pathname);
       } catch (err) {
         console.error("Failed to parse line_user param:", err);
       }
