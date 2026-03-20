@@ -14,6 +14,11 @@ service cloud.firestore {
     function isDocOwner() {
       return isAuthenticated() && request.auth.uid == resource.data.user_id;
     }
+    function isConnectionParticipant() {
+      return isAuthenticated()
+        && resource.data.keys().hasAll(['user1_id', 'user2_id'])
+        && (request.auth.uid == resource.data.user1_id || request.auth.uid == resource.data.user2_id);
+    }
     function isManagerOf(staffId) {
       return isAuthenticated() && (exists(/databases/$(database)/documents/connections/$(request.auth.uid + '_' + staffId)) || exists(/databases/$(database)/documents/connections/$(staffId + '_' + request.auth.uid)));
     }
@@ -77,9 +82,9 @@ service cloud.firestore {
     }
 
     match /connections/{id} {
-      allow read: if isAuthenticated() && (request.auth.uid == resource.data.user1_id || request.auth.uid == resource.data.user2_id || isAdmin());
+      allow read: if isAdmin() || isConnectionParticipant();
       allow create: if isAuthenticated() && (request.resource.data.user1_id == request.auth.uid || request.resource.data.user2_id == request.auth.uid);
-      allow update, delete: if isAuthenticated() && (request.auth.uid == resource.data.user1_id || request.auth.uid == resource.data.user2_id || isAdmin() || isAuthorizedMigration(resource.data.user1_id) || isAuthorizedMigration(resource.data.user2_id));
+      allow update, delete: if isAdmin() || isConnectionParticipant() || (resource.data.keys().hasAll(['user1_id', 'user2_id']) && (isAuthorizedMigration(resource.data.user1_id) || isAuthorizedMigration(resource.data.user2_id)));
     }
 
     match /notifications/{id} {
