@@ -350,7 +350,7 @@ export default function App() {
 
   const isLineSignedIn = Boolean(auth.currentUser?.providerData.some(provider => provider.providerId === "oidc.line") || currentUser?.line_user_id);
   const isGoogleSignedIn = Boolean(auth.currentUser?.providerData.some(provider => provider.providerId === "google.com"));
-  const accountLabel = "クルー";
+  const accountLabel = `${isLineSignedIn ? "LINEでログイン中" : "LINE未ログイン"} / ${isGoogleSignedIn ? "Google連携中" : "Google未連携"}`;
   const shareLink = currentUser ? `${window.location.origin}?share=${currentUser.share_token}` : "";
   const effectiveSharePeriodDays = publicUser?.share_period_days || currentUser?.share_period_days || 7;
   const publicSharePeriodDays = publicUser?.share_period_days || 7;
@@ -2011,7 +2011,7 @@ export default function App() {
                           {isLineSignedIn ? "LINEでログイン中" : "LINEでログイン"}
                         </div>
                         <p className={`text-xs ${isLineSignedIn ? "text-emerald-600" : "text-gray-400"}`}>
-                          {isLineSignedIn ? "連携を解除しても、別のログイン手段があれば継続できます。" : "LINEでログインすると通知連携ができます。"}
+                          {isLineSignedIn ? "LINEログインは有効です。" : "LINEでログインすると通知連携ができます。"}
                         </p>
                         <Button onClick={isLineSignedIn ? handleUnlinkLine : handleLineLogin} variant={isLineSignedIn ? "ghost" : "line"} className="w-full">
                           {isLineSignedIn ? "LINE連携を解除" : "LINEでログイン"}
@@ -2023,7 +2023,7 @@ export default function App() {
                           {isGoogleSignedIn ? "Google連携中" : "Google連携"}
                         </div>
                         <p className={`text-xs ${isGoogleSignedIn ? "text-emerald-600" : "text-gray-400"}`}>
-                          {isGoogleSignedIn ? "Googleアカウントでのログインが使えます。" : "Google連携を追加すると、LINE解除時もログインを維持できます。"}
+                          {isGoogleSignedIn ? "Googleログインは有効です。" : "Google連携を追加すると、LINE解除時もログインを維持できます。"}
                         </p>
                         <Button onClick={isGoogleSignedIn ? handleUnlinkGoogle : handleGoogleLogin} variant={isGoogleSignedIn ? "ghost" : "outline"} className="w-full">
                           {isGoogleSignedIn ? "Google連携中" : "Google連携"}
