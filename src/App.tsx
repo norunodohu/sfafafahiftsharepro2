@@ -659,6 +659,32 @@ export default function App() {
       try {
         if (user) {
           if (isProcessingLine) return;
+
+          // If Googleで入ってきて、既存の本体アカウントがあればそちらに即切替
+          const isGoogleProvider = user.providerData.some(p => p.providerId === "google.com");
+          if (isGoogleProvider && user.email) {
+            const existing = await getDocs(query(collection(db, "users"), where("google_email", "==", user.email)));
+            if (!existing.empty) {
+              const targetUid = existing.docs[0].data().uid || existing.docs[0].id;
+              if (targetUid && targetUid !== user.uid) {
+                try {
+                  const tokenRes = await fetch("/api/auth/google/firebase-token", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ uid: targetUid }),
+                  });
+                  const tokenData = await tokenRes.json();
+                  if (tokenRes.ok && tokenData.customToken) {
+                    await signInWithCustomToken(auth, tokenData.customToken);
+                    return;
+                  }
+                } catch (linkErr) {
+                  console.warn("Failed to swap to existing Google-linked account:", linkErr);
+                }
+              }
+            }
+          }
+
           let userDoc = await getDoc(doc(db, "users", user.uid));
           if (!userDoc.exists()) {
             const derivedId = (user.email || "").split("@")[0] || "";
