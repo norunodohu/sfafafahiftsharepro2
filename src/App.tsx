@@ -902,9 +902,11 @@ export default function App() {
         ? await getDocs(query(collection(db, "users"), where("google_email", "==", googleEmail)))
         : null;
       const targetUid = sourceUid || (!matchingGoogleUser?.empty ? matchingGoogleUser.docs[0].data().uid : result.user.uid);
+      let migrationPerformed = false;
 
       if (result.user.uid !== targetUid) {
         await migrateUserData(result.user.uid, targetUid);
+        migrationPerformed = true;
         try {
           await deleteDoc(doc(db, "users", result.user.uid));
         } catch (cleanupError) {
@@ -928,7 +930,9 @@ export default function App() {
         google_email: googleEmail,
       }, { merge: true });
 
-      alert(`1つに統合しました。\n本体: ${result.user.email || result.user.displayName || "Googleアカウント"}`);
+      if (migrationPerformed) {
+        alert("Google連携を本アカウントに統合しました。");
+      }
     } catch (err) {
       console.error("Google login error:", err);
       alert("Google連携に失敗しました。別アカウントに既に連携済みの可能性があります。");
