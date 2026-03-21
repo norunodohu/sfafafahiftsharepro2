@@ -366,6 +366,7 @@ export default function App() {
   const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
   const bellRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const dayScrollSyncRef = useRef<number | null>(null);
   const dayScrollRef = useRef<HTMLDivElement | null>(null);
   const dayRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -444,7 +445,7 @@ export default function App() {
     const target = dayRowRefs.current[key];
     if (target) {
       window.requestAnimationFrame(() => {
-        target.scrollIntoView({ behavior: "auto", block: "center" });
+        target.scrollIntoView({ behavior: "auto", block: "start" });
       });
       return;
     }
@@ -452,6 +453,27 @@ export default function App() {
       dayScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
     }
   }, [selectedDate, calendarMode]);
+
+  const handleDayScroll = () => {
+    if (dayScrollSyncRef.current !== null) return;
+    dayScrollSyncRef.current = window.requestAnimationFrame(() => {
+      dayScrollSyncRef.current = null;
+      const container = dayScrollRef.current;
+      if (!container) return;
+      const threshold = container.scrollTop + 24;
+      let nextDay: Date | null = null;
+
+      for (const day of scrollCalendarDays) {
+        const key = format(day, "yyyy-MM-dd");
+        const el = dayRowRefs.current[key];
+        if (el && el.offsetTop <= threshold) nextDay = day;
+      }
+
+      if (nextDay && !isSameDay(nextDay, selectedDate)) {
+        setSelectedDate(nextDay);
+      }
+    });
+  };
 
   const openIdModal = () => {
     setIdValue(currentUser?.search_id || "");
@@ -1773,13 +1795,13 @@ export default function App() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {["day", "week", "month"].map(mode => (
+                      {["day", "month"].map(mode => (
                         <button
                           key={mode}
                           onClick={() => setCalendarMode(mode as "day" | "week" | "month")}
                           className={`px-4 py-2 rounded-xl font-black ${calendarMode === mode ? "bg-blue-600 text-white" : "bg-gray-50 text-gray-500"}`}
                         >
-                          {mode === "day" ? "日" : mode === "week" ? "週" : "月"}
+                          {mode === "day" ? "日" : "月"}
                         </button>
                       ))}
                     </div>
@@ -1791,6 +1813,41 @@ export default function App() {
                   
                   {calendarMode === "day" && (
                     <div className="space-y-3">
+                      <div className="rounded-2xl border border-gray-100 bg-white p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="leading-none">
+                            <div className="text-[10px] font-black text-gray-400">{format(selectedDate, "yyyy年", { locale: ja })}</div>
+                            <div className="text-sm font-black text-gray-900">{format(selectedDate, "M月", { locale: ja })}</div>
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-medium">タップで移動</div>
+                        </div>
+                        <div className="grid grid-cols-7 gap-1 h-[200px] overflow-hidden">
+                          {["日", "月", "火", "水", "木", "金", "土"].map(d => (
+                            <div key={d} className={`text-center text-[10px] font-black ${d === "日" ? "text-red-500" : d === "土" ? "text-blue-500" : "text-gray-400"}`}>{d}</div>
+                          ))}
+                          {eachDayOfInterval({
+                            start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 0 }),
+                            end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 0 })
+                          }).map(day => {
+                            const dayAvails = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day));
+                            const isSelected = isSameDay(day, selectedDate);
+                            const hasItems = dayAvails.length > 0;
+                            const isOutsideCurrentMonth = day.getMonth() !== selectedDate.getMonth();
+                            return (
+                              <button
+                                key={day.toISOString()}
+                                onClick={() => setSelectedDate(day)}
+                                className={`relative aspect-square rounded-xl text-[12px] font-black transition-colors ${isSelected ? "bg-blue-600 text-white" : "bg-gray-50 hover:bg-gray-100 text-gray-800"} ${isOutsideCurrentMonth && !isSelected ? "opacity-35" : ""}`}
+                              >
+                                <span className={`${hasItems ? "underline decoration-black decoration-2 underline-offset-2" : ""}`}>
+                                  {format(day, "d")}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       <div className="flex items-center justify-end gap-3">
                         <button
                           onClick={() => setSelectedDate(today)}
@@ -1799,7 +1856,7 @@ export default function App() {
                           今日に戻る
                         </button>
                       </div>
-                      <div ref={dayScrollRef} className="max-h-[72vh] overflow-y-auto pr-1 space-y-3 scroll-smooth">
+                      <div ref={dayScrollRef} onScroll={handleDayScroll} className="max-h-[72vh] overflow-y-auto pr-1 space-y-3 scroll-smooth">
                         {scrollCalendarDays.map((day, idx) => {
                           const items = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)).sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
                           const isToday = isSameDay(day, today);
@@ -1937,26 +1994,15 @@ export default function App() {
                           return (
                             <button 
                               key={day.toString()}
-                              onClick={() => openDayDetailModal(day)}
+                              onClick={() => setSelectedDate(day)}
                               className={`rounded-2xl flex flex-col items-center justify-start transition-all relative aspect-square justify-center gap-1 ${isSelected ? "bg-blue-600 text-white shadow-xl shadow-blue-200" : "hover:bg-gray-50"} ${isOutsideCurrentMonth && !isSelected ? "text-gray-300" : ""}`}
                             >
                               <div className="w-full flex items-center justify-between">
                                 <span className={`text-lg sm:text-xl font-black ${isToday && !isSelected ? "text-blue-600" : ""} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`}>{format(day, "d")}</span>
                               </div>
                               {dayAvails.length > 0 && (
-                                <div className="w-full mt-1 space-y-1 text-[10px] leading-tight">
-                                  {dayAvails.slice(0, 2).map(a => (
-                                    <div key={a.id} className={`truncate rounded-lg px-1.5 py-0.5 ${a.status === "confirmed" ? "bg-red-50 text-red-700" : a.status === "pending" ? "bg-orange-50 text-orange-700" : a.status === "busy" ? "bg-red-100 text-red-900" : "bg-white border border-dashed border-gray-300 text-gray-600"} ${isOutsideCurrentMonth ? "opacity-50" : ""}`}>
-                                      {formatCompactTime(a.start_time)}-{formatCompactTime(a.end_time)}
-                                    </div>
-                                  ))}
-                                </div>
+                                <div className="mt-auto w-3/5 border-b-2 border-gray-900" />
                               )}
-                              <div className="mt-auto flex items-center justify-center gap-0.5 sm:gap-1">
-                                {dayAvails.slice(0, 3).map((a, idx) => (
-                                  <span key={idx} className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${a.status === "confirmed" ? "bg-red-500" : a.status === "busy" ? "bg-red-900" : a.status === "pending" ? "bg-orange-500" : "bg-gray-400"} ${isOutsideCurrentMonth && !isSelected ? "opacity-40" : ""}`} />
-                                ))}
-                              </div>
                             </button>
                           );
                         })}
