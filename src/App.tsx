@@ -64,7 +64,7 @@ import {
   limit,
   writeBatch
 } from "firebase/firestore";
-import { format, addDays, addMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
+import { format, addDays, addMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isBefore, startOfDay, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -1743,8 +1743,7 @@ export default function App() {
                 <Card className="lg:col-span-12 p-5 sm:p-8">
                   <div className="flex items-start justify-between mb-4 sm:mb-8 gap-3">
                     <div className="min-w-0">
-                      <div className="text-[10px] sm:hidden font-black text-gray-400 leading-none">{format(selectedDate, "yyyy年", { locale: ja })}</div>
-                      <h3 className="text-xl sm:text-2xl font-black leading-none">{calendarMode === "week" ? format(selectedDate, "M月", { locale: ja }) : format(selectedDate, "yyyy年M月", { locale: ja })}</h3>
+                      <h3 className="text-xl sm:text-2xl font-black leading-none">{format(selectedDate, "M月", { locale: ja })}</h3>
                     </div>
                     <div className="flex items-center gap-2">
                       {["day", "week", "month"].map(mode => (
@@ -1765,11 +1764,7 @@ export default function App() {
                   
                   {calendarMode === "day" && (
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-black text-gray-900">日別スクロール</p>
-                          <p className="text-xs text-gray-400">今日を基準に、前 5 日と後ろ 2 週間ほどを縦に見られます。</p>
-                        </div>
+                      <div className="flex items-center justify-end gap-3">
                         <button
                           onClick={() => setSelectedDate(today)}
                           className="shrink-0 px-3 py-2 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100"
@@ -1781,15 +1776,16 @@ export default function App() {
                         {scrollCalendarDays.map((day, idx) => {
                           const items = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)).sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
                           const isToday = isSameDay(day, today);
+                          const isPast = isBefore(startOfDay(day), startOfDay(addDays(today, -1)));
                           const isSelected = isSameDay(day, selectedDate);
                           return (
                             <div
                               key={day.toISOString()}
-                              className={`rounded-2xl border p-4 space-y-3 ${isSelected ? "border-blue-200 bg-blue-50/40 shadow-sm" : "border-gray-100 bg-gray-50/60"}`}
+                              className={`rounded-2xl border p-4 space-y-3 ${isSelected ? "border-blue-200 bg-blue-50/40 shadow-sm" : isPast ? "border-gray-200 bg-gray-100/80 opacity-70" : "border-gray-100 bg-gray-50/60"}`}
                             >
                               <div className="flex items-center justify-between gap-3">
                                 <div>
-                                  <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                                  <p className={`font-black ${isPast ? "text-gray-500" : day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
                                     {format(day, "M/d(E)", { locale: ja })}
                                   </p>
                                   <p className="text-[11px] text-gray-400">
@@ -1797,18 +1793,12 @@ export default function App() {
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => setSelectedDate(day)}
-                                    className="px-3 py-2 rounded-xl text-xs font-black bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-                                  >
-                                    見る
-                                  </button>
-                                  <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs">追加</Button>
+                                  <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs" disabled={isPast}>追加</Button>
                                 </div>
                               </div>
                               <div className="space-y-2">
                                 {items.length > 0 ? items.map(item => (
-                                  <div key={item.id} className="rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+                                  <div key={item.id} className={`rounded-xl border px-3 py-2 shadow-sm ${isPast ? "border-gray-200 bg-gray-50 text-gray-400" : "border-gray-200 bg-white"}`}>
                                     <div className="flex items-center justify-between gap-2 text-sm font-bold">
                                       <span>{item.start_time}-{item.end_time}</span>
                                       <span className="text-xs text-gray-500">{item.status === "confirmed" ? "確定" : item.status === "pending" ? "依頼中" : item.status === "busy" ? "予定あり" : "空き"}</span>
@@ -2236,10 +2226,6 @@ export default function App() {
               {item.label}
             </button>
           ))}
-          <button onClick={() => { openAvailabilityModal(undefined, new Date()); setShowMobileMenu(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-blue-600 text-white font-black mt-2">
-            <Plus size={18} />
-            予定の追加
-          </button>
         </div>
       )}
 
