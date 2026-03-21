@@ -5,6 +5,8 @@ import {
   Share2, 
   Plus, 
   Bell, 
+  ChevronRight, 
+  ChevronLeft, 
   LogOut, 
   User, 
   Users,
