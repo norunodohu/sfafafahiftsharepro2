@@ -905,12 +905,15 @@ export default function App() {
       let migrationPerformed = false;
 
       if (result.user.uid !== targetUid) {
-        await migrateUserData(result.user.uid, targetUid);
-        migrationPerformed = true;
-        try {
-          await deleteDoc(doc(db, "users", result.user.uid));
-        } catch (cleanupError) {
-          console.warn("Google auth user cleanup skipped:", cleanupError);
+        const googleUserDoc = await getDoc(doc(db, "users", result.user.uid));
+        if (googleUserDoc.exists()) {
+          await migrateUserData(result.user.uid, targetUid);
+          migrationPerformed = true;
+          try {
+            await deleteDoc(doc(db, "users", result.user.uid));
+          } catch (cleanupError) {
+            console.warn("Google auth user cleanup skipped:", cleanupError);
+          }
         }
       }
 
