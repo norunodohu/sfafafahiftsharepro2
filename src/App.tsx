@@ -24,7 +24,8 @@ import {
   RefreshCcw
 } from "lucide-react";
 import { 
-  initializeApp 
+  initializeApp,
+  FirebaseError
 } from "firebase/app";
 import { 
   getAuth, 
@@ -478,12 +479,22 @@ export default function App() {
       setCurrentUser({ ...currentUser, search_id: normalizedId, email: newEmail });
       setShowIdModal(false);
       alert("ID/パスワードを更新しました。");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("ID/Password update failed:", err);
-      const msg = err?.message?.includes("requires-recent-login")
-        ? "もう一度サインインしてから設定してください。"
-        : "ID/パスワードの設定に失敗しました。";
-      alert(msg);
+      const fbErr = err as FirebaseError;
+      if (fbErr?.code === "auth/operation-not-allowed") {
+        alert("Firebaseコンソールで Email/Password 認証を有効にしてください。");
+        return;
+      }
+      if (fbErr?.code === "auth/requires-recent-login") {
+        alert("もう一度サインインしてから設定してください。（Google/LINEで一度サインインし直してください）");
+        return;
+      }
+      if (fbErr?.code === "auth/credential-already-in-use" || fbErr?.code === "auth/email-already-in-use") {
+        alert("そのIDは既に使われています。別のIDにしてください。");
+        return;
+      }
+      alert("ID/パスワードの設定に失敗しました。");
     }
   };
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(selectedDate, { weekStartsOn: 0 }), i));
