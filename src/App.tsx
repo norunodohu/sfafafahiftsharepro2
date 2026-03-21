@@ -439,20 +439,31 @@ export default function App() {
     setShowDayDetailModal(true);
   };
 
+  const syncDayScrollToDate = (date: Date) => {
+    const key = format(date, "yyyy-MM-dd");
+    const container = dayScrollRef.current;
+    const target = dayRowRefs.current[key];
+    if (!container || !target) return;
+    container.scrollTo({
+      top: Math.max(0, target.offsetTop - container.offsetTop),
+      behavior: "auto"
+    });
+  };
+
   useEffect(() => {
     if (calendarMode !== "day") return;
-    const key = format(selectedDate, "yyyy-MM-dd");
-    const target = dayRowRefs.current[key];
-    if (target) {
-      window.requestAnimationFrame(() => {
-        target.scrollIntoView({ behavior: "auto", block: "start" });
-      });
-      return;
-    }
-    if (isSameDay(selectedDate, today)) {
-      dayScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
-    }
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => syncDayScrollToDate(selectedDate));
+    });
   }, [selectedDate, calendarMode]);
+
+  useEffect(() => {
+    if (calendarMode !== "day") return;
+    if (!isSameDay(selectedDate, today)) return;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => syncDayScrollToDate(today));
+    });
+  }, [calendarMode, today]);
 
   const handleDayScroll = () => {
     if (dayScrollSyncRef.current !== null) return;
