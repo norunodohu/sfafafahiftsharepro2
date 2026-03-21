@@ -1854,13 +1854,13 @@ export default function App() {
                                 {items.length > 0 ? items.map(item => (
                                   <motion.button
                                     key={item.id}
-                                    initial={{ opacity: 0, scale: 0.75, y: 18 }}
+                                    initial={{ opacity: 0, y: 10 }}
                                     animate={recentAddedIds.includes(item.id)
-                                      ? { opacity: [0, 1, 1, 1], scale: [0.75, 1.08, 1, 1], y: 0, boxShadow: ["0 0 0 rgba(59,130,246,0)", "0 0 0 8px rgba(59,130,246,0.18)", "0 0 0 0 rgba(59,130,246,0)", "0 0 0 0 rgba(59,130,246,0)"] }
-                                      : { opacity: 1, scale: [0.75, 1.06, 1], y: 0 }}
+                                      ? { opacity: [0, 1, 0.45, 1, 0.45, 1], backgroundColor: ["rgba(255,255,255,1)", "rgba(219,234,254,0.9)", "rgba(255,255,255,1)", "rgba(219,234,254,0.9)", "rgba(255,255,255,1)", "rgba(255,255,255,1)"] }
+                                      : { opacity: 1, y: 0 }}
                                     transition={recentAddedIds.includes(item.id)
-                                      ? { duration: 2, times: [0, 0.18, 0.4, 1], ease: "easeInOut" }
-                                      : { duration: 0.42, times: [0, 0.68, 1], ease: "easeOut" }}
+                                      ? { duration: 2, times: [0, 0.18, 0.36, 0.56, 0.74, 1], ease: "easeInOut" }
+                                      : { duration: 0.24, ease: "easeOut" }}
                                     onClick={() => openAvailabilityModal(item)}
                                     className={`w-full text-left rounded-xl border px-3 py-2 shadow-sm transition-colors ${isPast ? "border-gray-200 bg-gray-50 text-gray-400" : item.status === "open" ? "border-dashed border-gray-300 bg-white text-gray-700" : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"}`}
                                   >
