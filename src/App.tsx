@@ -1215,7 +1215,10 @@ export default function App() {
 
   const handleDeleteAvailability = async (id: string) => {
     try {
+      if (!window.confirm("本当に削除しますか？")) return;
       await deleteDoc(doc(db, "availabilities", id));
+      setAvailabilities(prev => prev.filter(item => item.id !== id));
+      if (editingAvailability?.id === id) closeAvailabilityModal();
     } catch (err: unknown) {
       console.error("Delete availability error:", err);
     }
@@ -1843,8 +1846,11 @@ export default function App() {
                               </div>
                               <div className="space-y-2">
                                 {items.length > 0 ? items.map(item => (
-                                  <button
+                                  <motion.button
                                     key={item.id}
+                                    initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    transition={{ duration: 0.22, ease: "easeOut" }}
                                     onClick={() => openAvailabilityModal(item)}
                                     className={`w-full text-left rounded-xl border px-3 py-2 shadow-sm transition-colors ${isPast ? "border-gray-200 bg-gray-50 text-gray-400" : item.status === "open" ? "border-dashed border-gray-300 bg-white text-gray-700" : "border-gray-200 bg-white text-gray-900 hover:bg-gray-50"}`}
                                   >
@@ -1853,7 +1859,7 @@ export default function App() {
                                       <span className="text-xs text-gray-500">{item.status === "confirmed" ? "確定" : item.status === "pending" ? "依頼中" : item.status === "busy" ? "予定あり" : "空き"}</span>
                                     </div>
                                     {item.note && <p className="text-xs text-gray-500 mt-1 truncate">{item.note}</p>}
-                                  </button>
+                                  </motion.button>
                                 )) : (
                                   <button
                                     onClick={() => !isPast && openAvailabilityModal(undefined, day)}
@@ -2570,7 +2576,6 @@ export default function App() {
                           alert("確定のため削除できません。(相手がいる予定の場合直接キャンセルをお知らせください)");
                           return;
                         }
-                        if (!window.confirm("この予定を削除しますか？")) return;
                         await handleDeleteAvailability(editingAvailability.id);
                         closeAvailabilityModal();
                       }}
