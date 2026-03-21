@@ -125,8 +125,8 @@ const handleFirestoreError = (error: Error | unknown, operationType: OperationTy
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  // Snapshotsでのpermission-deniedがUIを落とさないように警告ログにとどめる
+  console.warn('Firestore Error: ', JSON.stringify(errInfo));
 };
 
 // Types
