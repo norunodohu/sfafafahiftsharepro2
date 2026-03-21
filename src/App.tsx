@@ -36,7 +36,11 @@ import {
   GoogleAuthProvider, 
   signOut, 
   signInWithCustomToken,
-  unlink
+  unlink,
+  EmailAuthProvider,
+  linkWithCredential,
+  updateEmail,
+  updatePassword
 } from "firebase/auth";
 import { 
   getFirestore, 
@@ -342,6 +346,9 @@ export default function App() {
   const [showDayDetailModal, setShowDayDetailModal] = useState(false);
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [nameEditValue, setNameEditValue] = useState("");
+  const [showIdModal, setShowIdModal] = useState(false);
+  const [idValue, setIdValue] = useState("");
+  const [idPassword, setIdPassword] = useState("");
 
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
   const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
@@ -349,7 +356,10 @@ export default function App() {
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isLineSignedIn = Boolean(auth.currentUser?.providerData.some(provider => provider.providerId === "oidc.line") || currentUser?.line_user_id);
-  const isGoogleSignedIn = Boolean(auth.currentUser?.providerData.some(provider => provider.providerId === "google.com"));
+  const isGoogleSignedIn = Boolean(
+    auth.currentUser?.providerData.some(provider => provider.providerId === "google.com") ||
+    currentUser?.google_email
+  );
   const accountLabel = `${isLineSignedIn ? "LINEでログイン中" : "LINE未ログイン"} / ${isGoogleSignedIn ? "Google連携中" : "Google未連携"}`;
   const shareLink = currentUser ? `${window.location.origin}?share=${currentUser.share_token}` : "";
   const effectiveSharePeriodDays = publicUser?.share_period_days || currentUser?.share_period_days || 7;
@@ -412,6 +422,12 @@ export default function App() {
     setShowDayDetailModal(true);
   };
 
+  const openIdModal = () => {
+    setIdValue(currentUser?.search_id || "");
+    setIdPassword("");
+    setShowIdModal(true);
+  };
+
   const closeAvailabilityModal = () => {
     setShowAddModal(false);
     setEditingAvailability(null);
@@ -429,6 +445,46 @@ export default function App() {
     const [hour, minute] = time.split(":");
     if (minute === "00") return `${Number(hour)}`;
     return `${Number(hour)}:${minute}`;
+  };
+  const handleSaveIdLogin = async () => {
+    if (!auth.currentUser || !currentUser) return;
+    const normalizedId = normalizeAuthId(idValue);
+    if (normalizedId.length < 8) {
+      alert("IDは8文字以上にしてください。");
+      return;
+    }
+    if (idPassword.length < 8) {
+      alert("パスワードは8文字以上にしてください。");
+      return;
+    }
+    const newEmail = toAuthEmail(normalizedId);
+    try {
+      // まだIDが無い場合は email/password を新規リンク
+      if (!currentUser.search_id) {
+        const credential = EmailAuthProvider.credential(newEmail, idPassword);
+        await linkWithCredential(auth.currentUser, credential);
+      } else {
+        // IDを変える場合は email を更新
+        if (currentUser.search_id !== normalizedId) {
+          await updateEmail(auth.currentUser, newEmail);
+        }
+        // パスワードは毎回更新
+        await updatePassword(auth.currentUser, idPassword);
+      }
+      await setDoc(doc(db, "users", currentUser.uid), {
+        search_id: normalizedId,
+        email: newEmail,
+      }, { merge: true });
+      setCurrentUser({ ...currentUser, search_id: normalizedId, email: newEmail });
+      setShowIdModal(false);
+      alert("ID/パスワードを更新しました。");
+    } catch (err: any) {
+      console.error("ID/Password update failed:", err);
+      const msg = err?.message?.includes("requires-recent-login")
+        ? "もう一度サインインしてから設定してください。"
+        : "ID/パスワードの設定に失敗しました。";
+      alert(msg);
+    }
   };
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(selectedDate, { weekStartsOn: 0 }), i));
   const weekDayAvails = weekDays.map(day => displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)));
@@ -2099,6 +2155,25 @@ export default function App() {
 
                   <section className="space-y-4 pt-8 border-t border-gray-100">
                     <h3 className="text-xl font-black flex items-center gap-3">
+                      <User size={24} className="text-blue-600" />
+                      IDログイン
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      IDとパスワードを設定すると、LINEやGoogleがなくてもログインできます。
+                    </p>
+                    <div className="p-4 rounded-2xl border bg-gray-50 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold">{currentUser?.search_id ? `ID: ${currentUser.search_id}` : "ID未設定"}</p>
+                        <p className="text-xs text-gray-500">{currentUser?.search_id ? "パスワードは非表示です" : "IDとパスワードを設定できます"}</p>
+                      </div>
+                      <Button onClick={openIdModal} variant="outline">
+                        {currentUser?.search_id ? "ID/パスワードを変更" : "ID/パスワードを設定"}
+                      </Button>
+                    </div>
+                  </section>
+
+                  <section className="space-y-4 pt-8 border-t border-gray-100">
+                    <h3 className="text-xl font-black flex items-center gap-3">
                       <LogOut size={24} className="text-blue-600" />
                       サインアウト
                     </h3>
@@ -2133,6 +2208,44 @@ export default function App() {
             <Plus size={18} />
             予定の追加
           </button>
+        </div>
+      )}
+
+      {showIdModal && (
+        <div className="fixed inset-0 z-[75] flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowIdModal(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-[2rem] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-black">ID/パスワード設定</h4>
+              <button onClick={() => setShowIdModal(false)} className="p-2 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-600">ID（8文字以上）</label>
+              <input
+                value={idValue}
+                onChange={e => setIdValue(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="your-id"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-600">パスワード（8文字以上）</label>
+              <input
+                type="password"
+                value={idPassword}
+                onChange={e => setIdPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="********"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button onClick={() => setShowIdModal(false)} variant="ghost" className="flex-1">キャンセル</Button>
+              <Button onClick={handleSaveIdLogin} className="flex-1">保存する</Button>
+            </div>
+            <p className="text-[11px] text-gray-500">
+              IDはこのアカウント専用のメールアドレスとして登録されます。UUIDはそのまま、データもそのままです。
+            </p>
+          </div>
         </div>
       )}
 
