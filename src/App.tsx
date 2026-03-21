@@ -5,8 +5,6 @@ import {
   Share2, 
   Plus, 
   Bell, 
-  ChevronRight, 
-  ChevronLeft, 
   LogOut, 
   User, 
   Users,
@@ -384,8 +382,7 @@ export default function App() {
     : [];
   const today = new Date();
   const displayedAvailabilities = [...availabilities].sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
-  const nextFiveDays = Array.from({ length: 5 }, (_, i) => addDays(today, i));
-  const scheduleListDays = Array.from({ length: 14 }, (_, i) => addDays(today, i));
+  const scrollCalendarDays = Array.from({ length: 20 }, (_, i) => addDays(today, i - 5));
   const isBlockedByOwner = isPublicView && currentUser ? connections.some(c =>
     c.status === "blocked" &&
     c.blocked_by === publicUser?.uid &&
@@ -1765,31 +1762,47 @@ export default function App() {
                   </div>
                   
                   {calendarMode === "day" && (
-                    <div className="relative">
-                      <div className="absolute -left-3 top-1/2 -translate-y-1/2 z-10">
-                        <button onClick={() => setSelectedDate(addDays(selectedDate, -1))} className="p-2 rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50">
-                          <ChevronLeft size={18}/>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-gray-900">日別スクロール</p>
+                          <p className="text-xs text-gray-400">今日を基準に、前 5 日と後ろ 2 週間ほどを縦に見られます。</p>
+                        </div>
+                        <button
+                          onClick={() => setSelectedDate(today)}
+                          className="shrink-0 px-3 py-2 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100"
+                        >
+                          今日に戻る
                         </button>
                       </div>
-                      <div className="absolute -right-3 top-1/2 -translate-y-1/2 z-10">
-                        <button onClick={() => setSelectedDate(addDays(selectedDate, 1))} className="p-2 rounded-full bg-white shadow border border-gray-200 hover:bg-gray-50">
-                          <ChevronRight size={18}/>
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {[addDays(selectedDate, -1), selectedDate, addDays(selectedDate, 1)].map((day, idx) => {
-                          const items = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)).sort((a,b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
-                          const isFocus = idx === 1;
+                      <div className="max-h-[72vh] overflow-y-auto pr-1 space-y-3 scroll-smooth">
+                        {scrollCalendarDays.map((day, idx) => {
+                          const items = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)).sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
+                          const isToday = isSameDay(day, today);
+                          const isSelected = isSameDay(day, selectedDate);
                           return (
-                            <div key={day.toISOString()} className={`rounded-2xl border ${isFocus ? "border-blue-200 bg-blue-50/40" : "border-gray-100 bg-gray-50/60"} p-4 space-y-3`}>
-                              <div className="flex items-center justify-between">
+                            <div
+                              key={day.toISOString()}
+                              className={`rounded-2xl border p-4 space-y-3 ${isSelected ? "border-blue-200 bg-blue-50/40 shadow-sm" : "border-gray-100 bg-gray-50/60"}`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
                                 <div>
                                   <p className={`font-black ${day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
                                     {format(day, "M/d(E)", { locale: ja })}
                                   </p>
-                                  {isFocus && <p className="text-xs text-blue-600 font-semibold">この日</p>}
+                                  <p className="text-[11px] text-gray-400">
+                                    {idx === 5 ? "今日" : isToday ? "現在" : isSelected ? "選択中" : ""}
+                                  </p>
                                 </div>
-                                <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs">追加</Button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => setSelectedDate(day)}
+                                    className="px-3 py-2 rounded-xl text-xs font-black bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                                  >
+                                    見る
+                                  </button>
+                                  <Button onClick={() => openAvailabilityModal(undefined, day)} variant="outline" className="px-3 py-2 h-9 text-xs">追加</Button>
+                                </div>
                               </div>
                               <div className="space-y-2">
                                 {items.length > 0 ? items.map(item => (
