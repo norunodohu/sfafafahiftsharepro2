@@ -1749,25 +1749,27 @@ export default function App() {
               </Button>
             </div>
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3 lg:hidden">
-            <button
-              onClick={() => setShowCalendarModal(true)}
-              className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center text-gray-600"
-              aria-label="カレンダーを開く"
-            >
-              <Calendar size={20} />
-            </button>
-            <div className="min-w-0">
-              <div className="text-[10px] font-black text-gray-400">{format(selectedDate, "yyyy年", { locale: ja })}</div>
-              <div className="text-lg font-black text-gray-900">{format(selectedDate, "M月", { locale: ja })}</div>
+          {view === "myboard" && (
+            <div className="mt-3 flex items-center justify-between gap-3 lg:hidden">
+              <button
+                onClick={() => setShowCalendarModal(true)}
+                className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center text-gray-600"
+                aria-label="カレンダーを開く"
+              >
+                <Calendar size={20} />
+              </button>
+              <div className="min-w-0">
+                <div className="text-[10px] font-black text-gray-400">{format(selectedDate, "yyyy年", { locale: ja })}</div>
+                <div className="text-lg font-black text-gray-900">{format(selectedDate, "M月", { locale: ja })}</div>
+              </div>
+              <button
+                onClick={() => setSelectedDate(today)}
+                className="px-3 h-10 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100 whitespace-nowrap"
+              >
+                今日に戻る
+              </button>
             </div>
-            <button
-              onClick={() => setSelectedDate(today)}
-              className="px-3 h-10 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100 whitespace-nowrap"
-            >
-              今日に戻る
-            </button>
-          </div>
+          )}
         </header>
 
         <div className="pt-[7.25rem] sm:pt-0 px-4 sm:px-6 lg:px-12 max-w-[100rem] mx-auto">
@@ -1798,12 +1800,6 @@ export default function App() {
                           <Calendar size={20} />
                         </button>
                       )}
-                      <button
-                        onClick={() => setSelectedDate(today)}
-                        className="px-3 h-10 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100"
-                      >
-                        今日に戻る
-                      </button>
                     </div>
                   </div>
                   
