@@ -367,6 +367,7 @@ export default function App() {
   const bellRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const dayScrollSyncRef = useRef<number | null>(null);
+  const dayScrollProgrammaticRef = useRef(false);
   const dayScrollRef = useRef<HTMLDivElement | null>(null);
   const dayRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -444,10 +445,14 @@ export default function App() {
     const container = dayScrollRef.current;
     const target = dayRowRefs.current[key];
     if (!container || !target) return;
+    dayScrollProgrammaticRef.current = true;
     container.scrollTo({
-      top: Math.max(0, target.offsetTop - container.offsetTop),
+      top: Math.max(0, target.offsetTop),
       behavior: "auto"
     });
+    window.setTimeout(() => {
+      dayScrollProgrammaticRef.current = false;
+    }, 120);
   };
 
   useEffect(() => {
@@ -457,27 +462,24 @@ export default function App() {
     });
   }, [selectedDate, calendarMode]);
 
-  useEffect(() => {
-    if (calendarMode !== "day") return;
-    if (!isSameDay(selectedDate, today)) return;
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => syncDayScrollToDate(today));
-    });
-  }, [calendarMode, today]);
-
   const handleDayScroll = () => {
+    if (dayScrollProgrammaticRef.current) return;
     if (dayScrollSyncRef.current !== null) return;
     dayScrollSyncRef.current = window.requestAnimationFrame(() => {
       dayScrollSyncRef.current = null;
       const container = dayScrollRef.current;
       if (!container) return;
-      const threshold = container.scrollTop + 24;
+      const threshold = container.scrollTop + 12;
       let nextDay: Date | null = null;
+      let nextTop = -Infinity;
 
       for (const day of scrollCalendarDays) {
         const key = format(day, "yyyy-MM-dd");
         const el = dayRowRefs.current[key];
-        if (el && el.offsetTop <= threshold) nextDay = day;
+        if (el && el.offsetTop <= threshold && el.offsetTop > nextTop) {
+          nextDay = day;
+          nextTop = el.offsetTop;
+        }
       }
 
       if (nextDay && !isSameDay(nextDay, selectedDate)) {
