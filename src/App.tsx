@@ -1678,78 +1678,99 @@ export default function App() {
       {/* Main Content */}
       <main className={`lg:ml-72 min-h-screen pb-28 lg:pb-12`}>
         {/* Header */}
-        <header className="fixed sm:sticky top-0 inset-x-0 z-30 bg-[#F8FAFC]/90 backdrop-blur-md px-4 sm:px-6 py-3 lg:px-12 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-            <button
-              className="lg:hidden w-11 h-11 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-600"
-              onClick={() => setShowMobileMenu(v => !v)}
-            >
-              <span className="sr-only">メニュー</span>
-              <div className="space-y-1.5">
-                <div className="w-4 h-0.5 bg-current rounded-full" />
-                <div className="w-4 h-0.5 bg-current rounded-full" />
-                <div className="w-4 h-0.5 bg-current rounded-full" />
-              </div>
-            </button>
-            <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden h-10 w-auto shrink-0" />
-            <h2 className="hidden lg:block text-sm font-bold text-gray-400 uppercase tracking-widest">
-              {view === "myboard" ? "My Board" : view === "friends" ? "Friends" : "Preferences"}
-            </h2>
-            <h1 className="text-[0.95rem] lg:text-3xl font-black tracking-tight leading-none truncate">
-              {view === "myboard" ? "マイボード" : view === "friends" ? "フレンド" : "設定"}
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3 relative">
-            <div ref={bellRef} className="relative">
-              <button 
-                onClick={handleOpenNotifications}
-                className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-50 relative"
+        <header className="fixed sm:sticky top-0 inset-x-0 z-30 bg-[#F8FAFC]/90 backdrop-blur-md px-4 sm:px-6 py-3 lg:px-12">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+              <button
+                className="lg:hidden w-11 h-11 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-600"
+                onClick={() => setShowMobileMenu(v => !v)}
               >
-                <Bell size={20} />
-                {notifications.some(n => !n.read) && (
-                  <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-                )}
-              </button>
-              {showBellDropdown && (
-                <div className="absolute right-0 top-14 z-20 w-[min(90vw,24rem)] bg-white rounded-3xl shadow-2xl border border-gray-100 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-black text-lg">通知</p>
-                    <span className="text-xs text-gray-400">{notifications.length}件</span>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto space-y-2">
-                    {notifications.length > 0 ? notifications.map(notification => (
-                      <div key={notification.id} className={`p-4 rounded-2xl border flex items-start justify-between gap-3 ${notification.read ? "bg-gray-50 border-gray-100" : "bg-blue-50 border-blue-100"}`}>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold">{notification.message}</p>
-                          <p className="text-[11px] text-gray-400 mt-1">{notification.type}</p>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            await deleteDoc(doc(db, "notifications", notification.id));
-                            setNotificationFeedback("削除しました");
-                            window.setTimeout(() => setNotificationFeedback(""), 1800);
-                          }}
-                          className="text-gray-300 hover:text-red-500"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    )) : (
-                      <p className="text-sm text-gray-400 p-4 text-center">通知はまだありません</p>
-                    )}
-                  </div>
-                  {notificationFeedback && <p className="text-xs text-gray-400 px-1">{notificationFeedback}</p>}
+                <span className="sr-only">メニュー</span>
+                <div className="space-y-1.5">
+                  <div className="w-4 h-0.5 bg-current rounded-full" />
+                  <div className="w-4 h-0.5 bg-current rounded-full" />
+                  <div className="w-4 h-0.5 bg-current rounded-full" />
                 </div>
-              )}
+              </button>
+              <img src={CHOICREW_LOGO} alt="ChoiCrew" className="lg:hidden h-10 w-auto shrink-0" />
+              <h2 className="hidden lg:block text-sm font-bold text-gray-400 uppercase tracking-widest">
+                {view === "myboard" ? "My Board" : view === "friends" ? "Friends" : "Preferences"}
+              </h2>
+              <h1 className="text-[0.95rem] lg:text-3xl font-black tracking-tight leading-none truncate">
+                {view === "myboard" ? "マイボード" : view === "friends" ? "フレンド" : "設定"}
+              </h1>
             </div>
-            <Button onClick={() => openAvailabilityModal(undefined, selectedDate)} icon={Plus} className="hidden sm:flex">
-              予定を追加
-            </Button>
+
+            <div className="flex items-center gap-3 relative">
+              <div ref={bellRef} className="relative">
+                <button 
+                  onClick={handleOpenNotifications}
+                  className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-50 relative"
+                >
+                  <Bell size={20} />
+                  {notifications.some(n => !n.read) && (
+                    <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                  )}
+                </button>
+                {showBellDropdown && (
+                  <div className="absolute right-0 top-14 z-20 w-[min(90vw,24rem)] bg-white rounded-3xl shadow-2xl border border-gray-100 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="font-black text-lg">通知</p>
+                      <span className="text-xs text-gray-400">{notifications.length}件</span>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto space-y-2">
+                      {notifications.length > 0 ? notifications.map(notification => (
+                        <div key={notification.id} className={`p-4 rounded-2xl border flex items-start justify-between gap-3 ${notification.read ? "bg-gray-50 border-gray-100" : "bg-blue-50 border-blue-100"}`}>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold">{notification.message}</p>
+                            <p className="text-[11px] text-gray-400 mt-1">{notification.type}</p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              await deleteDoc(doc(db, "notifications", notification.id));
+                              setNotificationFeedback("削除しました");
+                              window.setTimeout(() => setNotificationFeedback(""), 1800);
+                            }}
+                            className="text-gray-300 hover:text-red-500"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )) : (
+                        <p className="text-sm text-gray-400 p-4 text-center">通知はまだありません</p>
+                      )}
+                    </div>
+                    {notificationFeedback && <p className="text-xs text-gray-400 px-1">{notificationFeedback}</p>}
+                  </div>
+                )}
+              </div>
+              <Button onClick={() => openAvailabilityModal(undefined, selectedDate)} icon={Plus} className="hidden sm:flex">
+                予定を追加
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 lg:hidden">
+            <button
+              onClick={() => setShowCalendarModal(true)}
+              className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center text-gray-600"
+              aria-label="カレンダーを開く"
+            >
+              <Calendar size={20} />
+            </button>
+            <div className="min-w-0">
+              <div className="text-[10px] font-black text-gray-400">{format(selectedDate, "yyyy年", { locale: ja })}</div>
+              <div className="text-lg font-black text-gray-900">{format(selectedDate, "M月", { locale: ja })}</div>
+            </div>
+            <button
+              onClick={() => setSelectedDate(today)}
+              className="px-3 h-10 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100 whitespace-nowrap"
+            >
+              今日に戻る
+            </button>
           </div>
         </header>
 
-        <div className="pt-20 sm:pt-0 px-4 sm:px-6 lg:px-12 max-w-[100rem] mx-auto">
+        <div className="pt-[7.25rem] sm:pt-0 px-4 sm:px-6 lg:px-12 max-w-[100rem] mx-auto">
           <AnimatePresence mode="wait">
             {view === "myboard" && (
               <motion.div 
