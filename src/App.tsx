@@ -21,7 +21,8 @@ import {
   Link2,
   Repeat2,
   Copy,
-  RefreshCcw
+  RefreshCcw,
+  Key
 } from "lucide-react";
 import { 
   initializeApp,
@@ -74,7 +75,15 @@ const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 const auth = getAuth(app);
 const CHOICREW_LOGO = "/choicrew-logo.svg";
 const AUTH_ID_DOMAIN = "choicrew.local";
-const presetAvatars = Array.from({ length: 30 }, (_, i) => `https://api.dicebear.com/7.x/avataaars/svg?seed=crew${i + 1}`);
+const avatarSeeds = [
+  "fox","panda","sloth","koala","tiger","lion","eagle","dolphin","whale","penguin",
+  "otter","owl","sparrow","parrot","crow","seal","shark","orca","hippo","rhino",
+  "giraffe","zebra","camel","buffalo","bear","moose","deer","ram","goat","sheep",
+  "hedgehog","raccoon","squirrel","beaver","hamster","duck","goose","flamingo","peacock","frog",
+  "lizard","gecko","chameleon","dragon","yeti","goblin","ghost","robot","ninja","wizard"
+];
+const presetAvatars = avatarSeeds.map(seed => `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${seed}&backgroundColor=transparent`);
+const pickRandomAvatar = () => presetAvatars[Math.floor(Math.random() * presetAvatars.length)];
 
 // Error Handling
 enum OperationType {
@@ -350,6 +359,7 @@ export default function App() {
   const [showIdModal, setShowIdModal] = useState(false);
   const [idValue, setIdValue] = useState("");
   const [idPassword, setIdPassword] = useState("");
+  const [showAvatarToast, setShowAvatarToast] = useState(false);
 
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
   const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
@@ -361,12 +371,12 @@ export default function App() {
     auth.currentUser?.providerData.some(provider => provider.providerId === "google.com") ||
     currentUser?.google_email
   );
-  const accountLabel = `${isLineSignedIn ? "LINEでログイン中" : "LINE未ログイン"} / ${isGoogleSignedIn ? "Google連携中" : "Google未連携"}`;
+  const accountLabel = `${isLineSignedIn ? "LINE連携中" : "LINE未連携"} / ${isGoogleSignedIn ? "Google連携中" : "Google未連携"}`;
   const shareLink = currentUser ? `${window.location.origin}?share=${currentUser.share_token}` : "";
   const effectiveSharePeriodDays = publicUser?.share_period_days || currentUser?.share_period_days || 7;
   const publicSharePeriodDays = publicUser?.share_period_days || 7;
   const sharePeriodLabel = effectiveSharePeriodDays === 14 ? "2週間" : effectiveSharePeriodDays === 30 ? "1か月" : "1週間";
-  const avatarSrc = currentUser?.avatar_url || currentUser?.line_picture || "";
+  const avatarSrc = selectedAvatar || currentUser?.avatar_url || "";
   const isOwnPreview = isPublicView && Boolean(currentUser?.uid && publicUser?.uid && currentUser.uid === publicUser.uid);
   const incomingRequests = currentUser
     ? requests.filter(r => r.staff_id === currentUser.uid && r.status === "pending")
@@ -499,7 +509,9 @@ export default function App() {
   };
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(selectedDate, { weekStartsOn: 0 }), i));
   const weekDayAvails = weekDays.map(day => displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)));
-  const visibleAvatars = showAllAvatars ? presetAvatars : presetAvatars.slice(0, 5);
+  const lineAvatarOption = currentUser?.line_picture ? [currentUser.line_picture] : [];
+  const avatarOptions = [...lineAvatarOption, ...presetAvatars];
+  const visibleAvatars = showAllAvatars ? avatarOptions : avatarOptions.slice(0, 8);
 
   const createNotification = async (userId: string, type: Notification["type"], message: string, date?: string) => {
     await addDoc(collection(db, "notifications"), {
@@ -616,8 +628,8 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser) return;
-    setSelectedAvatar(currentUser.avatar_url || currentUser.line_picture || presetAvatars[0]);
-  }, [currentUser?.uid, currentUser?.avatar_url, currentUser?.line_picture]);
+    setSelectedAvatar(currentUser.avatar_url || pickRandomAvatar());
+  }, [currentUser?.uid, currentUser?.avatar_url]);
   
   useEffect(() => {
     const handleResize = () => {}; // No longer needed for isDesktop
@@ -1280,6 +1292,8 @@ export default function App() {
     await updateDoc(doc(db, "users", currentUser.uid), { avatar_url: avatarUrl });
     setCurrentUser({ ...currentUser, avatar_url: avatarUrl });
     setSelectedAvatar(avatarUrl);
+    setShowAvatarToast(true);
+    setTimeout(() => setShowAvatarToast(false), 2500);
   };
 
   const handleUpdateSharePeriod = async (days: 7 | 14 | 30) => {
@@ -2081,13 +2095,13 @@ export default function App() {
                           </div>
                         ) : (
                           <div className="flex items-center justify-between gap-3">
-                            <p className="text-2xl font-black truncate flex items-center gap-3">
-                              <span className="inline-flex items-center justify-center w-10 h-10 rounded-2xl overflow-hidden bg-white border border-gray-100">
-                                <img src={selectedAvatar || avatarSrc || presetAvatars[0]} alt="avatar" className="w-full h-full object-cover" />
-                              </span>
-                              {currentUser?.name}
-                            </p>
+                            <p className="text-2xl font-black truncate">{currentUser?.name}</p>
                             <Button onClick={() => setIsEditingName(true)} variant="ghost">編集</Button>
+                          </div>
+                          <div className="flex items-center gap-2 text-lg">
+                            <MessageCircle size={18} className={isLineSignedIn ? "text-[#06C755]" : "text-gray-300"} />
+                            <User size={18} className={isGoogleSignedIn ? "text-emerald-700" : "text-gray-300"} />
+                            <Key size={18} className={currentUser?.search_id ? "text-blue-600" : "text-gray-300"} />
                           </div>
                         )}
                         <p className="text-gray-400 font-medium">{accountLabel}</p>
@@ -2115,10 +2129,6 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="pt-3 space-y-2">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">予定追加の考え方</label>
-                      <p className="text-xs text-gray-500">予定追加時に「毎週ループさせる」を選ぶと、ループ予定として保存されます。</p>
-                    </div>
                   </section>
 
                   <section className="space-y-6 pt-8 border-t border-gray-100">
@@ -2132,32 +2142,29 @@ export default function App() {
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div className={`w-full p-4 rounded-2xl border flex flex-col gap-2 justify-center ${isLineSignedIn ? "bg-emerald-50 border-emerald-100" : "bg-gray-50 border-gray-100"}`}>
                         <div className={`flex items-center gap-2 font-bold ${isLineSignedIn ? "text-emerald-700" : "text-gray-500"}`}>
-                          <Check size={18} />
-                          {isLineSignedIn ? "LINEでログイン中" : "LINEでログイン"}
+                          <Check size={18} className={isLineSignedIn ? "text-emerald-600" : "text-gray-300"} />
+                          {isLineSignedIn ? "LINE連携中" : "LINE連携"}
                         </div>
-                        <p className={`text-xs ${isLineSignedIn ? "text-emerald-600" : "text-gray-400"}`}>
-                          {isLineSignedIn ? "LINEログインは有効です。" : "ログインで通知連携も使えます。"}
-                        </p>
                         <Button onClick={isLineSignedIn ? handleUnlinkLine : handleLineLogin} variant={isLineSignedIn ? "ghost" : "line"} className="w-full text-sm">
-                          {isLineSignedIn ? "LINE連携を解除" : "LINEでログイン"}
+                          {isLineSignedIn ? "解除" : "ログイン"}
                         </Button>
                       </div>
 
                       <div className={`w-full p-4 rounded-2xl border flex flex-col gap-2 justify-center ${isGoogleSignedIn ? "bg-emerald-50 border-emerald-100" : "bg-gray-50 border-gray-100"}`}>
                         <div className={`flex items-center gap-2 font-bold ${isGoogleSignedIn ? "text-emerald-700" : "text-gray-500"}`}>
-                          <User size={18} />
+                          <Check size={18} className={isGoogleSignedIn ? "text-emerald-600" : "text-gray-300"} />
                           {isGoogleSignedIn ? "Google連携中" : "Google連携"}
                         </div>
                         <div className="text-xs space-y-1">
                           <p className={isGoogleSignedIn ? "text-emerald-600" : "text-gray-400"}>
-                            {isGoogleSignedIn ? "Google連携は有効です。" : "連携するとLINEがなくてもログイン維持できます。"}
+                            {isGoogleSignedIn ? "連携済み" : "連携するとLINEなしでも入れます。"}
                           </p>
                           {isGoogleSignedIn && currentUser?.google_email && (
                             <p className="text-emerald-700 font-semibold break-all">連携メール: {currentUser.google_email}</p>
                           )}
                         </div>
                         <Button onClick={isGoogleSignedIn ? handleUnlinkGoogle : handleGoogleLogin} variant={isGoogleSignedIn ? "ghost" : "outline"} className="w-full text-sm">
-                          {isGoogleSignedIn ? "Google連携を解除" : "Google連携"}
+                          {isGoogleSignedIn ? "解除" : "連携"}
                         </Button>
                       </div>
 
@@ -2170,7 +2177,7 @@ export default function App() {
                           {currentUser?.search_id ? `ID: ${currentUser.search_id}` : "IDとパスワードを設定できます。"}
                         </p>
                         <Button onClick={openIdModal} variant={currentUser?.search_id ? "ghost" : "secondary"} className="w-full text-sm">
-                          {currentUser?.search_id ? "ID/パスワードを変更" : "ID/パスワードを設定"}
+                          {currentUser?.search_id ? "変更" : "設定"}
                         </Button>
                       </div>
                     </div>
@@ -2212,6 +2219,12 @@ export default function App() {
             <Plus size={18} />
             予定の追加
           </button>
+        </div>
+      )}
+
+      {showAvatarToast && (
+        <div className="fixed bottom-6 right-6 z-[80] bg-gray-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm">
+          プロフィール画像を更新しました。
         </div>
       )}
 
