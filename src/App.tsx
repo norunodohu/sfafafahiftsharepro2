@@ -1678,7 +1678,7 @@ export default function App() {
       {/* Main Content */}
       <main className={`lg:ml-72 min-h-screen pb-28 lg:pb-12`}>
         {/* Header */}
-        <header className="sticky top-0 z-10 bg-[#F8FAFC]/80 backdrop-blur-md px-6 py-5 lg:px-12 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-30 bg-[#F8FAFC]/90 backdrop-blur-md px-4 sm:px-6 py-3 lg:px-12 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 lg:gap-3 min-w-0">
             <button
               className="lg:hidden w-11 h-11 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-600"
@@ -1760,36 +1760,34 @@ export default function App() {
                 className="grid grid-cols-1 lg:grid-cols-12 gap-8"
               >
                 <Card className="lg:col-span-12 p-5 sm:p-8">
-                  <div className="flex items-start justify-between mb-4 sm:mb-8 gap-3">
+                  <div className="flex items-center justify-between mb-3 sm:mb-8 gap-3">
                     <div className="min-w-0">
                       <div className="leading-none">
                         <div className="text-[10px] sm:text-xs font-black text-gray-400">{format(selectedDate, "yyyy年", { locale: ja })}</div>
-                        <h3 className="text-xl sm:text-2xl font-black leading-none">{format(selectedDate, "M月", { locale: ja })}</h3>
+                        <h3 className="text-lg sm:text-2xl font-black leading-none">{format(selectedDate, "M月", { locale: ja })}</h3>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {view === "myboard" && (
                         <button
                           onClick={() => setShowCalendarModal(true)}
-                          className="p-3 rounded-xl hover:bg-gray-100"
+                          className="w-10 h-10 rounded-xl hover:bg-gray-100 flex items-center justify-center"
                           aria-label="カレンダーを開く"
                         >
                           <Calendar size={20} />
                         </button>
                       )}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-end gap-3">
                       <button
                         onClick={() => setSelectedDate(today)}
-                        className="shrink-0 px-3 py-2 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100"
+                        className="px-3 h-10 rounded-xl text-xs font-black bg-gray-50 text-gray-600 hover:bg-gray-100"
                       >
                         今日に戻る
                       </button>
                     </div>
-                    <div ref={dayScrollRef} className="w-full max-h-[calc(100vh-14rem)] sm:max-h-[72vh] overflow-y-auto overflow-x-hidden pr-0 sm:pr-1 space-y-3 scroll-smooth">
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div ref={dayScrollRef} className="w-full max-h-[calc(100vh-11rem)] sm:max-h-[72vh] overflow-y-auto overflow-x-hidden pr-0 sm:pr-1 space-y-3 scroll-smooth">
                         {scrollCalendarDays.map((day, idx) => {
                           const items = displayedAvailabilities.filter(a => isSameDay(parseISO(a.date), day)).sort((a, b) => `${a.start_time}`.localeCompare(`${b.start_time}`));
                           const isToday = isSameDay(day, today);
