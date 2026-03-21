@@ -57,6 +57,7 @@ import {
   getDoc, 
   setDoc,
   getDocs,
+  deleteField,
   Timestamp,
   serverTimestamp,
   orderBy,
@@ -77,12 +78,12 @@ const CHOICREW_LOGO = "/choicrew-logo.svg";
 const AUTH_ID_DOMAIN = "choicrew.local";
 const avatarSeeds = [
   "fox","panda","sloth","koala","tiger","lion","eagle","dolphin","whale","penguin",
-  "otter","owl","sparrow","parrot","crow","seal","shark","orca","hippo","rhino",
-  "giraffe","zebra","camel","buffalo","bear","moose","deer","ram","goat","sheep",
-  "hedgehog","raccoon","squirrel","beaver","hamster","duck","goose","flamingo","peacock","frog",
-  "lizard","gecko","chameleon","dragon","yeti","goblin","ghost","robot","ninja","wizard"
+  "otter","owl","parrot","seal","shark","orca","hippo","rhino","giraffe","zebra",
+  "camel","buffalo","bear","moose","deer","goat","sheep","hedgehog","raccoon","squirrel",
+  "beaver","hamster","duck","flamingo","peacock","frog","gecko","dragon","yeti","goblin",
+  "ghost","robot","ninja","wizard","personA","personB","personC","personD","monsterA","monsterB"
 ];
-const presetAvatars = avatarSeeds.map(seed => `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${seed}&backgroundColor=transparent`);
+const presetAvatars = avatarSeeds.map(seed => `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${seed}&backgroundColor=transparent`);
 const pickRandomAvatar = () => presetAvatars[Math.floor(Math.random() * presetAvatars.length)];
 
 // Error Handling
@@ -619,10 +620,15 @@ export default function App() {
     }
     try {
       await unlink(auth.currentUser, "google.com");
+      await updateDoc(doc(db, "users", auth.currentUser.uid), { google_email: deleteField() });
+      if (currentUser) setCurrentUser({ ...currentUser, google_email: undefined });
       alert("Google連携を解除しました。");
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Google unlink error:", error);
-      alert("Google連携の解除に失敗しました。");
+      const errMsg = error instanceof Error && error.message.includes("requires-recent-login")
+        ? "もう一度サインインしてから解除してください。"
+        : "Google連携の解除に失敗しました。";
+      alert(errMsg);
     }
   };
 
