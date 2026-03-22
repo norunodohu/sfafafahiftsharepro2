@@ -1838,11 +1838,11 @@ export default function App() {
                             <div
                               key={day.toISOString()}
                               ref={el => { dayRowRefs.current[format(day, "yyyy-MM-dd")] = el; }}
-                              className={`rounded-2xl border p-6 sm:p-7 min-h-[18rem] space-y-4 ${isSelected ? "border-blue-200 bg-blue-50/40 shadow-sm" : isPast ? "border-gray-300 bg-gray-200/80 opacity-55" : "border-gray-100 bg-gray-50/60"}`}
+                              className={`space-y-3 pb-4 sm:pb-5 ${isPast ? "opacity-60" : ""}`}
                             >
-                              <div className="flex items-center justify-between gap-3">
+                              <div className={`flex items-center justify-between gap-3 pb-3 border-b ${isSelected ? "border-blue-200" : "border-gray-100"}`}>
                                 <div>
-                                  <p className={`font-black text-lg sm:text-2xl ${isPast ? "text-gray-500" : day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
+                                  <p className={`font-black text-lg sm:text-2xl ${isPast ? "text-gray-400" : day.getDay() === 0 ? "text-red-500" : day.getDay() === 6 ? "text-blue-500" : "text-gray-900"}`}>
                                     {format(day, "d(E)", { locale: ja })}
                                   </p>
                                   <p className="text-xs sm:text-sm text-gray-400">
@@ -1850,7 +1850,7 @@ export default function App() {
                                   </p>
                                 </div>
                               </div>
-                              <div className="space-y-3">
+                              <div className="space-y-3 pl-0 sm:pl-2">
                                 {items.length > 0 ? items.map(item => (
                                   <motion.button
                                     key={item.id}
@@ -1881,7 +1881,7 @@ export default function App() {
                                 {items.length > 0 && !isPast && (
                                   <button
                                     onClick={() => openAvailabilityModal(undefined, day)}
-                                    className="mx-auto w-11 h-11 rounded-full border border-dashed border-blue-200 bg-white/70 text-blue-500 text-lg font-black hover:bg-blue-50 flex items-center justify-center opacity-70"
+                                    className="ml-1 inline-flex items-center justify-center w-9 h-9 rounded-full border border-dashed border-blue-200 bg-white/70 text-blue-500 text-lg font-black hover:bg-blue-50 opacity-55"
                                   >
                                     ＋
                                   </button>
