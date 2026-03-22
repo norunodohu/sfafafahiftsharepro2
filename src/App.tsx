@@ -358,6 +358,8 @@ export default function App() {
   const [requestTarget, setRequestTarget] = useState<Availability | null>(null);
   const [requestStart, setRequestStart] = useState("");
   const [requestEnd, setRequestEnd] = useState("");
+  const [publicViewScope, setPublicViewScope] = useState<"single" | "friends">("single");
+  const [publicFilterMode, setPublicFilterMode] = useState<"all" | "open" | "my_requests">("all");
   const [showScheduleList, setShowScheduleList] = useState(false);
   const [scheduleFilter, setScheduleFilter] = useState<"all" | "confirmed" | "open" | "request">("all");
   const [pendingRequestAction, setPendingRequestAction] = useState<{
@@ -437,11 +439,28 @@ export default function App() {
     .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
     .filter(a => parseISO(a.date) < addDays(new Date(new Date().setHours(0,0,0,0)), publicSharePeriodDays))
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
-  const groupedPublicAvailabilities = publicUpcomingAvailabilities.reduce<Record<string, Availability[]>>((acc, availability) => {
+  const publicFriendIds = currentUser
+    ? connections
+        .filter(c => c.status !== "blocked" && (c.user1_id === currentUser.uid || c.user2_id === currentUser.uid))
+        .map(c => (c.user1_id === currentUser.uid ? c.user2_id : c.user1_id))
+    : [];
+  const publicFriendAvailabilities = availabilities
+    .filter(() => !isPublicHidden)
+    .filter(a => currentUser ? publicFriendIds.includes(a.user_id) : false)
+    .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
+    .filter(a => parseISO(a.date) < addDays(new Date(new Date().setHours(0,0,0,0)), publicSharePeriodDays))
+    .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
+  const publicVisibleAvailabilities = publicViewScope === "friends" ? publicFriendAvailabilities : publicUpcomingAvailabilities;
+  const filteredPublicAvailabilities = publicVisibleAvailabilities.filter(a => {
+    if (publicFilterMode === "open") return a.status === "open";
+    if (publicFilterMode === "my_requests") return currentUser ? requests.some(r => r.availability_id === a.id && r.staff_id === currentUser.uid && r.status === "pending") : false;
+    return true;
+  });
+  const groupedPublicAvailabilities = filteredPublicAvailabilities.reduce<Record<string, Availability[]>>((acc, availability) => {
     (acc[availability.date] ||= []).push(availability);
     return acc;
   }, {});
-  const publicScheduleDates = Array.from(new Set(publicUpcomingAvailabilities.map(a => a.date))).sort();
+  const publicScheduleDates = Array.from(new Set(filteredPublicAvailabilities.map(a => a.date))).sort();
   const isPendingMyRequest = (availabilityId: string) =>
     requests.some(r => r.availability_id === availabilityId && r.staff_id === currentUser?.uid && r.status === "pending");
   const isApprovedMyRequest = (availabilityId: string) =>
@@ -1543,14 +1562,41 @@ export default function App() {
             </div>
           </div>
 
-          {isOwnPreview && (
-            <Card className="p-4 bg-blue-50 border-blue-100">
-              <p className="font-bold text-blue-700 flex items-center gap-2"><Eye size={16} />ログイン中のあなたのページです。</p>
-            </Card>
-          )}
-
           <div className="space-y-4">
             <h3 className="text-xl font-black">公開中の空き時間</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setPublicViewScope("single")}
+                className={`px-4 py-2 rounded-xl text-sm font-black border ${publicViewScope === "single" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-400 border-gray-200"}`}
+              >
+                個人
+              </button>
+              <button
+                onClick={() => setPublicViewScope("friends")}
+                className={`px-4 py-2 rounded-xl text-sm font-black border ${publicViewScope === "friends" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-400 border-gray-200"}`}
+              >
+                フレンドまとめて
+              </button>
+              <div className="w-2" />
+              <button
+                onClick={() => setPublicFilterMode("all")}
+                className={`px-4 py-2 rounded-xl text-sm font-black border ${publicFilterMode === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-400 border-gray-200"}`}
+              >
+                すべて
+              </button>
+              <button
+                onClick={() => setPublicFilterMode("open")}
+                className={`px-4 py-2 rounded-xl text-sm font-black border ${publicFilterMode === "open" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-400 border-gray-200"}`}
+              >
+                空きだけ
+              </button>
+              <button
+                onClick={() => setPublicFilterMode("my_requests")}
+                className={`px-4 py-2 rounded-xl text-sm font-black border ${publicFilterMode === "my_requests" ? "bg-amber-500 text-white border-amber-500" : "bg-white text-gray-400 border-gray-200"}`}
+              >
+                依頼中
+              </button>
+            </div>
             <div className="grid gap-4">
               {isPublicHidden ? (
                 <div className="py-12 text-center bg-white rounded-3xl border border-dashed border-gray-200 text-gray-500 font-bold">
@@ -1582,7 +1628,7 @@ export default function App() {
                             <p className="text-lg font-semibold text-gray-700">{a.start_time} - {a.end_time}</p>
                             {a.status === "confirmed" && <p className="text-xs text-emerald-600 mt-1">確定</p>}
                             {a.status === "pending" && <p className="text-xs text-amber-600 mt-1">やり取り中</p>}
-                            {isMyPendingRequest && <p className="text-xs text-amber-600 mt-1">やり取り中</p>}
+                            {isMyPendingRequest && <p className="text-xs text-amber-600 mt-1">依頼中</p>}
                             {isMyApprovedRequest && <p className="text-xs text-amber-600 mt-1">承認済み</p>}
                           </div>
                           <button
