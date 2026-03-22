@@ -439,14 +439,22 @@ export default function App() {
     .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
     .filter(a => parseISO(a.date) < addDays(new Date(new Date().setHours(0,0,0,0)), publicSharePeriodDays))
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
-  const publicFriendIds = currentUser
+  const publicFriendCount = publicUser
+    ? connections.filter(c => c.status !== "blocked" && (c.user1_id === publicUser.uid || c.user2_id === publicUser.uid)).length
+    : 0;
+  const hasFriendAccess = Boolean(currentUser && publicUser && publicFriendCount >= 2 && connections.some(c =>
+    c.status !== "blocked" &&
+    ([c.user1_id, c.user2_id].includes(currentUser.uid)) &&
+    ([c.user1_id, c.user2_id].includes(publicUser.uid))
+  ));
+  const publicFriendIds = publicUser
     ? connections
-        .filter(c => c.status !== "blocked" && (c.user1_id === currentUser.uid || c.user2_id === currentUser.uid))
-        .map(c => (c.user1_id === currentUser.uid ? c.user2_id : c.user1_id))
+        .filter(c => c.status !== "blocked" && (c.user1_id === publicUser.uid || c.user2_id === publicUser.uid))
+        .map(c => (c.user1_id === publicUser.uid ? c.user2_id : c.user1_id))
     : [];
   const publicFriendAvailabilities = availabilities
     .filter(() => !isPublicHidden)
-    .filter(a => currentUser ? publicFriendIds.includes(a.user_id) : false)
+    .filter(a => hasFriendAccess ? publicFriendIds.includes(a.user_id) : false)
     .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
     .filter(a => parseISO(a.date) < addDays(new Date(new Date().setHours(0,0,0,0)), publicSharePeriodDays))
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
@@ -1572,8 +1580,8 @@ export default function App() {
                 個人
               </button>
               <button
-                onClick={() => setPublicViewScope("friends")}
-                className={`px-4 py-2 rounded-xl text-sm font-black border ${publicViewScope === "friends" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-400 border-gray-200"}`}
+                onClick={() => hasFriendAccess && setPublicViewScope("friends")}
+                className={`px-4 py-2 rounded-xl text-sm font-black border ${publicViewScope === "friends" ? "bg-blue-600 text-white border-blue-600" : "bg-white border-gray-200"} ${hasFriendAccess ? "text-gray-400" : "text-gray-300 opacity-50 cursor-not-allowed"}`}
               >
                 フレンドまとめて
               </button>
