@@ -1898,12 +1898,25 @@ export default function App() {
                                       ? { duration: 2, times: [0, 0.18, 0.36, 0.56, 0.74, 1], ease: "easeInOut" }
                                       : { duration: 0.24, ease: "easeOut" }}
                                     onClick={() => openAvailabilityModal(item)}
-                                    className={`w-full text-left rounded-2xl border-2 border-dashed px-4 py-4 sm:py-5 shadow-sm transition-colors ${isPast ? "border-gray-300 bg-gray-50 text-gray-400" : "border-gray-300 bg-white text-gray-700"}`}
+                                    className={`w-full text-left rounded-2xl px-4 py-4 sm:py-5 shadow-sm transition-all ${
+                                      item.status === "confirmed"
+                                        ? "border-2 border-solid border-emerald-200 bg-emerald-50 text-emerald-950"
+                                        : "border-2 border-dashed border-blue-200 bg-white text-gray-700"
+                                    } ${isPast ? "opacity-70" : ""}`}
                                   >
                                     <div className="flex items-center justify-between gap-2 text-base sm:text-lg font-black">
-                                      <span>{item.start_time}-{item.end_time}</span>
+                                      <span className={item.status === "confirmed" ? "text-emerald-800" : "text-blue-700"}>
+                                        {item.start_time}-{item.end_time}
+                                      </span>
+                                      <span className={`text-[10px] px-2 py-1 rounded-full font-black ${
+                                        item.status === "confirmed"
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : "bg-blue-50 text-blue-500"
+                                      }`}>
+                                        {item.status === "confirmed" ? "確定" : "空き"}
+                                      </span>
                                     </div>
-                                    {item.note && <p className="text-sm text-gray-500 mt-1 truncate">{item.note}</p>}
+                                    {item.note && <p className={`text-sm mt-1 truncate ${item.status === "confirmed" ? "text-emerald-700" : "text-gray-500"}`}>{item.note}</p>}
                                   </motion.button>
                                 )) : (
                                   <button
@@ -1918,7 +1931,7 @@ export default function App() {
                                   <div className="flex justify-center">
                                     <button
                                       onClick={() => openAvailabilityModal(undefined, day)}
-                                      className="text-blue-500 text-3xl font-black leading-none opacity-70 hover:opacity-100"
+                                      className="text-blue-500 text-3xl font-black leading-none opacity-50 hover:opacity-100"
                                       aria-label="空き追加"
                                     >
                                       ＋
