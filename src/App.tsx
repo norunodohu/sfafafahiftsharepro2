@@ -502,7 +502,7 @@ export default function App() {
   };
 
   const statusLabel = (status: Availability["status"]) =>
-    status === "open" ? "空き" : status === "pending" ? "やり取り中" : status === "confirmed" ? "確定" : "予定あり";
+    status === "open" ? "空き" : "やり取り中";
 
   const statusColor = (status: Availability["status"]) =>
     status === "confirmed" ? "bg-red-500" : status === "pending" ? "bg-orange-500" : status === "busy" ? "bg-red-900" : "bg-gray-400";
