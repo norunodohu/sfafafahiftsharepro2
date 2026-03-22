@@ -1186,8 +1186,8 @@ export default function App() {
         date: draftDate,
         start_time: draftTime.start,
         end_time: draftTime.end,
-        status: draftNote.trim() ? "confirmed" : editingAvailability ? draftStatus : "open",
-        note: editingAvailability ? draftNote : "",
+        status: draftStatus,
+        note: draftNote,
         is_recurring: draftIsRecurring,
       };
 
@@ -2625,6 +2625,26 @@ export default function App() {
                   </p>
                 </div>
                 <div className="flex items-center gap-5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const order: Availability["status"][] = ["confirmed", "open", "pending"];
+                      const next = order[(order.indexOf(draftStatus) + 1) % order.length];
+                      setDraftStatus(next);
+                    }}
+                    className={`h-10 px-3 flex items-center justify-center gap-2 rounded-full transition-colors ${
+                      draftStatus === "confirmed"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : draftStatus === "pending"
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-blue-50 text-blue-700"
+                    }`}
+                    aria-label="状態切り替え"
+                  >
+                    <span className="text-xs font-black">
+                      {draftStatus === "confirmed" ? "確定" : draftStatus === "pending" ? "交渉中" : "空き"}
+                    </span>
+                  </button>
                   <button
                     type="button"
                     onClick={async () => {
