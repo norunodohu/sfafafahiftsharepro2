@@ -76,6 +76,7 @@ const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 const auth = getAuth(app);
 const CHOICREW_LOGO = "/choicrew-logo.svg";
 const AUTH_ID_DOMAIN = "choicrew.local";
+const DEFAULT_TIME_STORAGE_KEY = "choicrew_default_time";
 const avatarSeeds = [
   "fox","panda","sloth","koala","tiger","lion","eagle","dolphin","whale","penguin",
   "otter","owl","parrot","seal","shark","orca","hippo","rhino","giraffe","zebra",
@@ -329,14 +330,25 @@ export default function App() {
   const [editingAvailability, setEditingAvailability] = useState<Availability | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Availability | null>(null);
   const [draftDate, setDraftDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [draftTime, setDraftTime] = useState({ start: "10:00", end: "15:00" });
+  const [draftTime, setDraftTime] = useState(() => {
+    if (typeof window === "undefined") return { start: "10:00", end: "15:00" };
+    try {
+      const saved = window.localStorage.getItem(DEFAULT_TIME_STORAGE_KEY);
+      if (!saved) return { start: "10:00", end: "15:00" };
+      const parsed = JSON.parse(saved) as { start?: string; end?: string };
+      if (!parsed.start || !parsed.end) return { start: "10:00", end: "15:00" };
+      return { start: parsed.start, end: parsed.end };
+    } catch {
+      return { start: "10:00", end: "15:00" };
+    }
+  });
   const [draftNote, setDraftNote] = useState("");
   const [draftStatus, setDraftStatus] = useState<Availability["status"]>("open");
   const [draftIsRecurring, setDraftIsRecurring] = useState(false);
   const [recentAddedIds, setRecentAddedIds] = useState<string[]>([]);
   const [lastNewDraft, setLastNewDraft] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
-    time: { start: "10:00", end: "15:00" },
+    time: draftTime,
     note: "",
     status: "open" as Availability["status"],
     isRecurring: false,
@@ -2632,9 +2644,11 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
+                      const next = { start: draftTime.start, end: draftTime.end };
+                      window.localStorage.setItem(DEFAULT_TIME_STORAGE_KEY, JSON.stringify(next));
                       setLastNewDraft(prev => ({
                         ...prev,
-                        time: draftTime,
+                        time: next,
                       }));
                       alert(`${draftTime.start}-${draftTime.end} が次回登録時にも使えるデフォルト時間として登録されました。続けて予定を追加して下さい。`);
                     }}
