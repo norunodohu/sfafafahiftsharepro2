@@ -77,6 +77,7 @@ const auth = getAuth(app);
 const CHOICREW_LOGO = "/choicrew-logo.svg";
 const AUTH_ID_DOMAIN = "choicrew.local";
 const DEFAULT_TIME_STORAGE_KEY = "choicrew_default_time";
+const VIEW_STORAGE_KEY = "choicrew_view";
 const avatarSeeds = [
   "haruto","yuto","sota","ren","riku","subaru","kota","itsuki","asahi","shun",
   "yui","mei","aoi","hana","mio","noa","kana","aya","nana","yuna",
@@ -387,6 +388,19 @@ export default function App() {
       // ignore malformed local storage
     }
   }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const savedView = window.localStorage.getItem(VIEW_STORAGE_KEY);
+    if (savedView === "myboard" || savedView === "friends" || savedView === "settings") {
+      setView(savedView);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(VIEW_STORAGE_KEY, view);
+  }, [view]);
 
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
   const confirmedSectionRef = useRef<HTMLDivElement | null>(null);
@@ -1649,7 +1663,7 @@ export default function App() {
 
           <div className="pt-8 border-t border-gray-100 flex flex-col gap-3">
             {isOwnPreview ? (
-              <Button onClick={() => window.location.href = window.location.origin} variant="outline">スケジュールに戻る</Button>
+              <Button onClick={() => window.close()} variant="outline">閉じる</Button>
             ) : !isLoggedIn ? (
               <div className="px-4 py-3 rounded-2xl bg-blue-50 text-blue-700 text-sm font-semibold">ログインすると依頼ができます。</div>
             ) : null}
@@ -1936,7 +1950,7 @@ export default function App() {
                       <h3 className="text-xl font-black">フレンドにシェア</h3>
                       <p className="text-sm text-gray-500">リンクを送れば予定を見せられます。トークやメールでそのまま貼り付けてください。</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                       <Button onClick={copyShareLink} className="whitespace-nowrap" icon={Copy}>
                         リンクをコピー
                       </Button>
@@ -2019,25 +2033,25 @@ export default function App() {
                             <div className="flex items-center gap-2 flex-wrap">
                               {!isBlocked && (
                                 <Button
-                                  onClick={() => window.location.href = `${window.location.origin}?share=${peer.share_token}`}
+                                  onClick={() => window.open(`${window.location.origin}?share=${peer.share_token}`, "_blank", "noopener,noreferrer")}
                                   variant="outline"
-                                  className="whitespace-nowrap"
+                                  className="whitespace-nowrap w-full sm:w-auto"
                                   icon={CalendarDays}
                                 >
-                                  予定を開く
+                                  プレビュー
                                 </Button>
                               )}
                               <Button
                                 onClick={() => isBlocked ? handleUnblock(peer.uid) : handleBlock(peer.uid)}
                                 variant={isBlocked ? "secondary" : "outline"}
-                                className="whitespace-nowrap"
+                                className="whitespace-nowrap w-full sm:w-auto"
                               >
                                 {isBlocked ? "ブロック解除" : "ブロック"}
                               </Button>
                               <Button
                                 onClick={() => handleUnfollow(peer.uid)}
                                 variant="ghost"
-                                className="text-red-500 whitespace-nowrap"
+                                className="text-red-500 whitespace-nowrap w-full sm:w-auto"
                               >
                                 フレンド解除
                               </Button>
