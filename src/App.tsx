@@ -82,7 +82,7 @@ const avatarSeeds = [
   "riku","aoi","mei","sora","yuna","kota","hana","tomo","rei","mio",
   "yuto","mai","nao","kana","subaru","noa","itsuki","asahi","aya","hina"
 ];
-const presetAvatars = avatarSeeds.map(seed => `https://api.dicebear.com/7.x/personas/svg?seed=${seed}&backgroundColor=transparent`);
+const presetAvatars = avatarSeeds.map(seed => `https://api.dicebear.com/7.x/lorelei-neutral/svg?seed=${seed}&backgroundColor=transparent`);
 const pickRandomAvatar = () => presetAvatars[Math.floor(Math.random() * presetAvatars.length)];
 const getDefaultTimeStorageKey = (uid: string) => `${DEFAULT_TIME_STORAGE_KEY}_${uid}`;
 
