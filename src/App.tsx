@@ -1900,22 +1900,26 @@ export default function App() {
                                     className={`w-full text-left rounded-2xl px-4 py-4 sm:py-5 shadow-sm transition-all ${
                                       item.status === "confirmed"
                                         ? "border-2 border-solid border-amber-200 bg-amber-50 text-amber-950"
+                                        : item.status === "pending"
+                                          ? "border-2 border-solid border-orange-200 bg-orange-50 text-orange-950"
                                         : "border-2 border-dashed border-blue-200 bg-white text-gray-700"
                                     } ${isPast ? "opacity-70" : ""}`}
                                   >
                                     <div className="flex items-center justify-between gap-2 text-base sm:text-lg font-black">
-                                      <span className={item.status === "confirmed" ? "text-amber-700" : "text-blue-700"}>
+                                      <span className={item.status === "confirmed" ? "text-amber-700" : item.status === "pending" ? "text-orange-700" : "text-blue-700"}>
                                         {item.start_time}-{item.end_time}
                                       </span>
                                       <span className={`text-[10px] px-2 py-1 rounded-full font-black ${
                                         item.status === "confirmed"
                                           ? "bg-amber-100 text-amber-700"
+                                          : item.status === "pending"
+                                            ? "bg-orange-100 text-orange-700"
                                           : "bg-blue-50 text-blue-500"
                                       }`}>
-                                        {item.status === "confirmed" ? "確定" : "空き"}
+                                        {item.status === "confirmed" ? "確定" : item.status === "pending" ? "やり取り中" : "空き"}
                                       </span>
                                     </div>
-                                    {item.note && <p className={`text-sm mt-1 truncate ${item.status === "confirmed" ? "text-amber-700" : "text-gray-500"}`}>{item.note}</p>}
+                                    {item.note && <p className={`text-sm mt-1 truncate ${item.status === "confirmed" ? "text-amber-700" : item.status === "pending" ? "text-orange-700" : "text-gray-500"}`}>{item.note}</p>}
                                   </motion.button>
                                 )) : (
                                   <button
