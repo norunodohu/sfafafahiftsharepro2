@@ -1454,7 +1454,7 @@ export default function App() {
               className="w-full max-w-[320px] mx-auto drop-shadow-[0_24px_40px_rgba(37,99,235,0.16)]"
             />
             <p className="text-xl text-gray-500 font-medium">
-              空いた時間を、既知の相手にかんたんに公開できます。
+              空いた時間をかんたんに公開できます。
             </p>
           </div>
 
