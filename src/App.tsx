@@ -605,14 +605,15 @@ export default function App() {
   const visibleAvatars = showAllAvatars ? avatarOptions : avatarOptions.slice(0, 5);
 
   const createNotification = async (userId: string, type: Notification["type"], message: string, date?: string) => {
-    await addDoc(collection(db, "notifications"), {
+    const payload: Record<string, unknown> = {
       user_id: userId,
       type,
       message,
-      date,
       timestamp: serverTimestamp(),
       read: false
-    });
+    };
+    if (date) payload.date = date;
+    await addDoc(collection(db, "notifications"), payload);
   };
 
   const sendLineNotification = async (lineUserId: string | undefined, message: string): Promise<LineNotificationResult> => {
