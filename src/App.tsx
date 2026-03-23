@@ -449,16 +449,16 @@ export default function App() {
     .filter(a => parseISO(a.date) < addDays(new Date(new Date().setHours(0,0,0,0)), publicSharePeriodDays))
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
   const publicFriendCount = publicUser
-    ? connections.filter(c => c.status !== "blocked" && (c.user1_id === publicUser.uid || c.user2_id === publicUser.uid)).length
+    ? connections.filter(c => c.status === "active" && (c.user1_id === publicUser.uid || c.user2_id === publicUser.uid)).length
     : 0;
   const hasFriendAccess = Boolean(currentUser && publicUser && publicFriendCount >= 2 && connections.some(c =>
-    c.status !== "blocked" &&
+    c.status === "active" &&
     ([c.user1_id, c.user2_id].includes(currentUser.uid)) &&
     ([c.user1_id, c.user2_id].includes(publicUser.uid))
   ));
   const publicFriendIds = publicUser
     ? connections
-        .filter(c => c.status !== "blocked" && (c.user1_id === publicUser.uid || c.user2_id === publicUser.uid))
+        .filter(c => c.status === "active" && (c.user1_id === publicUser.uid || c.user2_id === publicUser.uid))
         .map(c => (c.user1_id === publicUser.uid ? c.user2_id : c.user1_id))
     : [];
   const publicFriendAvailabilities = availabilities
@@ -1031,6 +1031,7 @@ export default function App() {
 
     const peerIds = Array.from(new Set(
       connections
+        .filter(conn => conn.status === "active")
         .map(conn => [conn.user1_id, conn.user2_id].find(id => id !== currentUser.uid))
         .filter((id): id is string => Boolean(id))
     ));
