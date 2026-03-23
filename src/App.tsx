@@ -1442,6 +1442,11 @@ export default function App() {
       requested_by: currentUser.uid,
       requested_at: serverTimestamp()
     }, { merge: true });
+    await createNotification(
+      target.uid,
+      "system",
+      `${currentUser.name}さんからフレンド申請が届きました。`,
+    );
     setConnections(prev => {
       const withoutPair = prev.filter(c => !((c.user1_id === currentUser.uid && c.user2_id === target.uid) || (c.user2_id === currentUser.uid && c.user1_id === target.uid)));
       return [...withoutPair, {
@@ -1466,6 +1471,11 @@ export default function App() {
       requested_at: deleteField(),
       blocked_by: deleteField(),
     }, { merge: true });
+    await createNotification(
+      peerId,
+      "system",
+      `${currentUser.name}さんがフレンド申請を承認しました。`,
+    );
     setConnections(prev => prev.map(c =>
       ((c.user1_id === currentUser.uid && c.user2_id === peerId) || (c.user2_id === currentUser.uid && c.user1_id === peerId))
         ? { ...c, status: "active", requested_by: undefined, requested_at: undefined, blocked_by: undefined }
@@ -2059,6 +2069,52 @@ export default function App() {
                 className="space-y-6 max-w-6xl"
               >
                 <Card className="p-6 sm:p-8 space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <h3 className="text-xl font-black">フレンド申請</h3>
+                        <p className="text-sm text-gray-500">ID検索で申請し、相手は承認または辞退できます。</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <input
+                        value={friendSearchId}
+                        onChange={e => setFriendSearchId(e.target.value)}
+                        placeholder="相手のIDを入力"
+                        className="flex-1 px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <Button onClick={handleSearchFriendById} className="whitespace-nowrap">
+                        検索
+                      </Button>
+                    </div>
+                    {friendSearchStatus === "not_found" && (
+                      <div className="p-4 rounded-2xl bg-gray-50 text-gray-500 text-sm font-bold">
+                        IDが見つかりませんでした。
+                      </div>
+                    )}
+                    {friendSearchResult && friendSearchStatus !== "not_found" && (
+                      <div className="p-4 rounded-2xl border border-gray-100 bg-white flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <p className="font-black">IDが見つかりました</p>
+                          <p className="text-sm text-gray-500">
+                            {friendSearchStatus === "pending" || friendSearchStatus === "sent"
+                              ? "フレンド申請中"
+                              : "フレンド申請を送れます"}
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => handleSendFriendRequest(friendSearchResult)}
+                          variant={friendSearchStatus === "pending" || friendSearchStatus === "sent" ? "secondary" : "outline"}
+                          disabled={friendSearchStatus === "pending" || friendSearchStatus === "sent"}
+                        >
+                          {friendSearchStatus === "pending" || friendSearchStatus === "sent" ? "フレンド申請中" : "フレンド申請"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                <Card className="p-6 sm:p-8 space-y-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <h3 className="text-xl font-black">公開URL</h3>
@@ -2080,6 +2136,45 @@ export default function App() {
                       </Button>
                     </div>
                   </div>
+                </Card>
+
+                <Card className="p-6 sm:p-8 space-y-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <h3 className="text-xl font-black">受信したフレンド申請</h3>
+                    </div>
+                  </div>
+
+                  {incomingFriendRequests.length > 0 ? (
+                    <div className="grid gap-3 sm:gap-4">
+                      {incomingFriendRequests.map(conn => {
+                        const peerId = conn.user1_id === currentUser?.uid ? conn.user2_id : conn.user1_id;
+                        return (
+                          <div
+                            key={conn.id}
+                            className="p-4 sm:p-5 bg-amber-50 rounded-2xl border border-amber-100 flex items-center justify-between gap-3 flex-wrap"
+                          >
+                            <div>
+                              <p className="font-black text-amber-900">フレンド申請中</p>
+                              <p className="text-sm text-amber-700">相手の名前は表示していません。</p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Button onClick={() => handleAcceptFriendRequest(peerId)} className="whitespace-nowrap">
+                                承認
+                              </Button>
+                              <Button onClick={() => handleDeclineFriendRequest(peerId)} variant="ghost" className="whitespace-nowrap text-red-500">
+                                辞退
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-8 text-center text-gray-400 font-bold bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                      受信した申請はありません。
+                    </div>
+                  )}
                 </Card>
 
                 <Card className="p-6 sm:p-8 space-y-4">
