@@ -319,6 +319,7 @@ export default function App() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionUsers, setConnectionUsers] = useState<UserProfile[]>([]);
+  const [incomingFriendRequestUsers, setIncomingFriendRequestUsers] = useState<UserProfile[]>([]);
   const [friendSearchId, setFriendSearchId] = useState("");
   const [friendSearchResult, setFriendSearchResult] = useState<UserProfile | null>(null);
   const [friendSearchStatus, setFriendSearchStatus] = useState<"idle" | "found" | "not_found" | "pending" | "sent">("idle");
@@ -1043,6 +1044,29 @@ export default function App() {
       setConnectionUsers(users.filter((u): u is UserProfile => Boolean(u)));
     }).catch(err => {
       console.error("Failed to load connection users:", err);
+    });
+  }, [currentUser?.uid, connections]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setIncomingFriendRequestUsers([]);
+      return;
+    }
+
+    const incomingIds = Array.from(new Set(
+      connections
+        .filter(conn => conn.status === "pending" && conn.requested_by !== currentUser.uid)
+        .map(conn => [conn.user1_id, conn.user2_id].find(id => id !== currentUser.uid))
+        .filter((id): id is string => Boolean(id))
+    ));
+
+    Promise.all(incomingIds.map(async (peerId) => {
+      const snap = await getDoc(doc(db, "users", peerId));
+      return snap.exists() ? (snap.data() as UserProfile) : null;
+    })).then(users => {
+      setIncomingFriendRequestUsers(users.filter((u): u is UserProfile => Boolean(u)));
+    }).catch(err => {
+      console.error("Failed to load incoming friend request users:", err);
     });
   }, [currentUser?.uid, connections]);
 
@@ -2104,20 +2128,31 @@ export default function App() {
                     )}
                     {friendSearchResult && friendSearchStatus !== "not_found" && (
                       <div className="p-4 rounded-2xl border border-gray-100 bg-white flex items-center justify-between gap-3 flex-wrap">
-                        <div>
-                          <p className="font-black">IDが見つかりました</p>
-                          <p className="text-sm text-gray-500">
-                            {friendSearchStatus === "pending" || friendSearchStatus === "sent"
-                              ? "フレンド申請中"
-                              : "フレンド申請を送れます"}
-                          </p>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 shrink-0">
+                            <img
+                              src={friendSearchResult.avatar_url || friendSearchResult.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friendSearchResult.name}`}
+                              alt={friendSearchResult.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-black truncate">{friendSearchResult.name}</p>
+                            <p className="text-sm text-gray-500 truncate">ID: {friendSearchResult.search_id}</p>
+                            <p className="text-sm text-gray-500">
+                              {friendSearchStatus === "pending" || friendSearchStatus === "sent"
+                                ? "フレンド申請中"
+                                : "フレンド申請を送れます"}
+                            </p>
+                          </div>
                         </div>
                         <Button
-                          onClick={() => handleSendFriendRequest(friendSearchResult)}
+                          onClick={() => friendSearchStatus === "pending" || friendSearchStatus === "sent"
+                            ? handleCancelFriendRequest(friendSearchResult)
+                            : handleSendFriendRequest(friendSearchResult)}
                           variant={friendSearchStatus === "pending" || friendSearchStatus === "sent" ? "secondary" : "outline"}
-                          disabled={friendSearchStatus === "pending" || friendSearchStatus === "sent"}
                         >
-                          {friendSearchStatus === "pending" || friendSearchStatus === "sent" ? "フレンド申請中" : "フレンド申請"}
+                          {friendSearchStatus === "pending" || friendSearchStatus === "sent" ? "申請取り消し" : "フレンド申請"}
                         </Button>
                       </div>
                     )}
