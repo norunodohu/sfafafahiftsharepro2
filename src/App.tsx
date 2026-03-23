@@ -2186,6 +2186,53 @@ export default function App() {
                 exit={false}
                 className="grid grid-cols-1 lg:grid-cols-12 gap-8"
               >
+                {incomingRequests.length > 0 && (
+                  <Card className="lg:col-span-12 p-5 sm:p-6 space-y-4">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <h3 className="text-xl font-black">受信した依頼</h3>
+                        <p className="text-sm text-gray-500">依頼を受けている案件を確認して、承認または辞退できます。</p>
+                      </div>
+                      <div className="px-3 py-2 rounded-full bg-amber-50 text-amber-700 text-xs font-black">
+                        {incomingRequests.length}件
+                      </div>
+                    </div>
+                    <div className="grid gap-3">
+                      {incomingRequests.map(request => {
+                        const requestStart = request.requested_start_time || request.start_time;
+                        const requestEnd = request.requested_end_time || request.end_time;
+                        return (
+                          <div key={request.id} className="p-4 sm:p-5 rounded-2xl border border-amber-100 bg-amber-50/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="font-black text-amber-900 truncate">
+                                {request.manager_name}さんから {requestStart}〜{requestEnd} で依頼を受けています
+                              </p>
+                              <p className="text-sm text-amber-700 mt-1">
+                                {format(parseISO(request.date), "M月d日(E)", { locale: ja })}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Button
+                                onClick={() => handleApproveRequest(request)}
+                                className="whitespace-nowrap"
+                              >
+                                承認
+                              </Button>
+                              <Button
+                                onClick={() => handleRejectRequest(request)}
+                                variant="outline"
+                                className="whitespace-nowrap"
+                              >
+                                辞退
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
                 <Card className="lg:col-span-12 p-5 sm:p-8">
                   <div className="flex items-center justify-between mb-3 sm:mb-8 gap-3">
                     <div className="min-w-0">
