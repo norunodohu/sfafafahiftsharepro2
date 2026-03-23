@@ -2629,7 +2629,7 @@ export default function App() {
                             <div className="flex items-center gap-2 flex-wrap">
                               {!isBlocked && (
                                 <Button
-                                  onClick={() => window.open(`${window.location.origin}?friend_uid=${peer.uid}`, "_blank", "noopener,noreferrer")}
+                                  onClick={() => handleOpenFriendView(peer)}
                                   variant="outline"
                                   className="whitespace-nowrap w-full sm:w-auto"
                                   icon={CalendarDays}
