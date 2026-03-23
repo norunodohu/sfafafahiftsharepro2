@@ -389,6 +389,7 @@ export default function App() {
   const [idValue, setIdValue] = useState("");
   const [idPassword, setIdPassword] = useState("");
   const [showAvatarToast, setShowAvatarToast] = useState(false);
+  const unreadNotificationCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
     if (!currentUser?.uid || typeof window === "undefined") return;
@@ -623,6 +624,24 @@ export default function App() {
     };
     if (date) payload.date = date;
     await addDoc(collection(db, "notifications"), payload);
+  };
+
+  const handleMarkNotificationRead = async (notificationId: string) => {
+    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
+    await updateDoc(doc(db, "notifications", notificationId), { read: true });
+  };
+
+  const handleDeleteNotification = async (notificationId: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+    await deleteDoc(doc(db, "notifications", notificationId));
+  };
+
+  const handleDeleteNotifications = async (items: Notification[]) => {
+    if (items.length === 0) return;
+    const batch = writeBatch(db);
+    items.forEach(item => batch.delete(doc(db, "notifications", item.id)));
+    await batch.commit();
+    setNotifications(prev => prev.filter(n => !items.some(item => item.id === n.id)));
   };
 
   const sendLineNotification = async (lineUserId: string | undefined, message: string): Promise<LineNotificationResult> => {
