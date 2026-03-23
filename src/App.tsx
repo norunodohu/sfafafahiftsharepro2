@@ -685,8 +685,9 @@ export default function App() {
 
   const handleUnlinkLine = async () => {
     if (!currentUser) return;
-    if (!isGoogleSignedIn && currentUser.line_user_id) {
-      alert("LINE連携を解除するとログイン手段がなくなります。別のログイン手段を先に追加してください。");
+    const hasOtherLoginMethod = Boolean(currentUser.search_id);
+    if (!hasOtherLoginMethod && currentUser.line_user_id) {
+      alert("LINE連携を解除するとログイン手段がなくなります。IDログインを先に設定してください。");
       return;
     }
     await updateDoc(doc(db, "users", currentUser.uid), {
