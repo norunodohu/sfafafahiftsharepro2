@@ -472,17 +472,14 @@ export default function App() {
     .filter(a => parseISO(a.date) >= new Date(new Date().setHours(0,0,0,0)))
     .filter(a => parseISO(a.date) < addDays(new Date(new Date().setHours(0,0,0,0)), publicSharePeriodDays))
     .sort((a, b) => `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`));
-  const publicFriendIds = publicUser
+  const currentFriendIds = currentUser
     ? connections
-        .filter(c => c.status === "active" && ([c.user1_id, c.user2_id].includes(publicUser.uid)))
-        .map(c => (c.user1_id === publicUser.uid ? c.user2_id : c.user1_id))
+        .filter(c => c.status === "active" && ([c.user1_id, c.user2_id].includes(currentUser.uid)))
+        .map(c => (c.user1_id === currentUser.uid ? c.user2_id : c.user1_id))
     : [];
-  const publicFriendCount = publicFriendIds.length;
-  const hasFriendAccess = Boolean(currentUser && publicUser && publicFriendCount >= 2 && connections.some(c =>
-    c.status === "active" &&
-    ([c.user1_id, c.user2_id].includes(currentUser.uid)) &&
-    ([c.user1_id, c.user2_id].includes(publicUser.uid))
-  ));
+  const publicFriendIds = currentFriendIds;
+  const publicFriendCount = currentFriendIds.length;
+  const hasFriendAccess = Boolean(currentUser && publicFriendCount >= 2);
   const publicFriendAvailabilities = availabilities
     .filter(() => !isPublicHidden)
     .filter(a => hasFriendAccess ? publicFriendIds.includes(a.user_id) : false)
@@ -1718,6 +1715,20 @@ export default function App() {
     setView(nextView);
     exitPublicView();
   }, [exitPublicView]);
+
+  const handleOpenFriendView = useCallback((friend: UserProfile) => {
+    if (!currentUser?.uid) return;
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("share");
+    nextUrl.searchParams.set("friend_uid", friend.uid);
+    window.history.pushState({}, document.title, `${nextUrl.pathname}?${nextUrl.searchParams.toString()}`);
+    setPendingFriendUid(friend.uid);
+    setViewKind("friend");
+    setIsPublicView(true);
+    setPublicUser(friend);
+    setPublicViewScope("single");
+    setPublicFilterMode("all");
+  }, [currentUser?.uid]);
 
   const copyShareLink = () => {
     if (!currentUser) return;
