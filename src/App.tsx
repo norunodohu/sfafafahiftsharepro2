@@ -1366,6 +1366,11 @@ export default function App() {
         created_at: serverTimestamp()
       };
       const requestRef = await addDoc(collection(db, "requests"), reqData);
+      setRequests(prev => {
+        const nextRequest = { id: requestRef.id, ...reqData } as ShiftRequest;
+        const withoutSamePair = prev.filter(r => !(r.availability_id === availability.id && r.manager_id === currentUser.uid));
+        return [...withoutSamePair, nextRequest];
+      });
 
       await createNotification(
         availability.user_id,
@@ -1405,6 +1410,7 @@ export default function App() {
       `${currentUser.name}さんが依頼を承認しました。${request.date} ${request.start_time}-${request.end_time}`, 
       request.date
     );
+    setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: "approved" } : r));
     alert("承認しました。");
   };
 
@@ -1418,6 +1424,7 @@ export default function App() {
       `${currentUser.name}さんが依頼を削除しました。${request.date} ${request.start_time}-${request.end_time}`, 
       request.date
     );
+    setRequests(prev => prev.filter(r => r.id !== request.id));
     alert("辞退しました。");
   };
 
@@ -1430,6 +1437,7 @@ export default function App() {
       `${currentUser.name}さんが依頼を取り消しました。${request.date} ${request.start_time}-${request.end_time}`,
       request.date
     );
+    setRequests(prev => prev.filter(r => r.id !== request.id));
     alert("依頼を取り消しました。");
   };
 
