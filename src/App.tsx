@@ -323,6 +323,12 @@ export default function App() {
   const [friendSearchId, setFriendSearchId] = useState("");
   const [friendSearchResult, setFriendSearchResult] = useState<UserProfile | null>(null);
   const [friendSearchStatus, setFriendSearchStatus] = useState<"idle" | "found" | "not_found" | "pending" | "sent">("idle");
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
+  const [scanMessage, setScanMessage] = useState("");
+  const scannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerStreamRef = useRef<MediaStream | null>(null);
+  const scannerAbortRef = useRef(false);
   
   const [view, setView] = useState<"myboard" | "friends" | "settings">("myboard");
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -709,6 +715,12 @@ export default function App() {
     if (!currentUser) return;
     setSelectedAvatar(currentUser.avatar_url || pickRandomAvatar());
   }, [currentUser?.uid, currentUser?.avatar_url]);
+
+  useEffect(() => {
+    return () => {
+      scannerStreamRef.current?.getTracks().forEach(track => track.stop());
+    };
+  }, []);
 
   useEffect(() => {
     if (!currentUser?.uid || !friendSearchResult) return;
@@ -1458,6 +1470,62 @@ export default function App() {
     setFriendSearchStatus(relation?.status === "pending" ? "pending" : "found");
   };
 
+  const friendQrDataUrl = currentUser?.search_id
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(currentUser.search_id)}`
+    : "";
+
+  const stopScanner = async () => {
+    scannerAbortRef.current = true;
+    scannerStreamRef.current?.getTracks().forEach(track => track.stop());
+    scannerStreamRef.current = null;
+    if (scannerVideoRef.current) scannerVideoRef.current.srcObject = null;
+    setShowQrScanner(false);
+  };
+
+  const startScanner = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setScanMessage("このブラウザはカメラ読み取りに対応していません。");
+      return;
+    }
+    setScanMessage("");
+    scannerAbortRef.current = false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      scannerStreamRef.current = stream;
+      if (scannerVideoRef.current) {
+        scannerVideoRef.current.srcObject = stream;
+        await scannerVideoRef.current.play();
+      }
+      const Detector = (window as Window & typeof globalThis & { BarcodeDetector?: typeof BarcodeDetector }).BarcodeDetector;
+      if (!Detector) {
+        setScanMessage("このブラウザはQR読み取りAPIに対応していません。");
+        return;
+      }
+      const detector = new Detector({ formats: ["qr_code"] });
+      const loop = async () => {
+        if (scannerAbortRef.current || !scannerVideoRef.current) return;
+        try {
+          const codes = await detector.detect(scannerVideoRef.current);
+          if (codes.length > 0) {
+            const id = codes[0].rawValue.trim();
+            setFriendSearchId(id);
+            setShowQrScanner(false);
+            await stopScanner();
+            await handleSearchFriendById();
+            return;
+          }
+        } catch (err) {
+          console.warn("QR scan error:", err);
+        }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    } catch (err) {
+      console.error("Camera start failed:", err);
+      setScanMessage("カメラの起動に失敗しました。権限を確認してください。");
+    }
+  };
+
   const handleSendFriendRequest = async (target: UserProfile) => {
     if (!currentUser) return;
     const pairId = [currentUser.uid, target.uid].sort().join("_");
@@ -2120,6 +2188,12 @@ export default function App() {
                       <Button onClick={handleSearchFriendById} className="whitespace-nowrap">
                         検索
                       </Button>
+                      <Button onClick={() => setShowQrModal(true)} variant="outline" className="whitespace-nowrap">
+                        My QR
+                      </Button>
+                      <Button onClick={() => setShowQrScanner(true)} variant="secondary" className="whitespace-nowrap">
+                        カメラで読み取り
+                      </Button>
                     </div>
                     {friendSearchStatus === "not_found" && (
                       <div className="p-4 rounded-2xl bg-gray-50 text-gray-500 text-sm font-bold">
@@ -2194,14 +2268,25 @@ export default function App() {
                     <div className="grid gap-3 sm:gap-4">
                       {incomingFriendRequests.map(conn => {
                         const peerId = conn.user1_id === currentUser?.uid ? conn.user2_id : conn.user1_id;
+                        const peer = incomingFriendRequestUsers.find(u => u.uid === peerId);
                         return (
                           <div
                             key={conn.id}
                             className="p-4 sm:p-5 bg-amber-50 rounded-2xl border border-amber-100 flex items-center justify-between gap-3 flex-wrap"
                           >
-                            <div>
-                              <p className="font-black text-amber-900">フレンド申請中</p>
-                              <p className="text-sm text-amber-700">相手の名前は表示していません。</p>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-12 h-12 rounded-full overflow-hidden bg-white shrink-0">
+                                <img
+                                  src={peer?.avatar_url || peer?.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${peer?.name || peerId}`}
+                                  alt={peer?.name || "friend request"}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-black text-amber-900 truncate">{peer?.name || "フレンド申請中"}</p>
+                                <p className="text-sm text-amber-700 truncate">ID: {peer?.search_id || "未設定"}</p>
+                                <p className="text-sm text-amber-700">フレンド申請中</p>
+                              </div>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <Button onClick={() => handleAcceptFriendRequest(peerId)} className="whitespace-nowrap">
@@ -2252,6 +2337,7 @@ export default function App() {
                               </div>
                               <div className="min-w-0">
                                 <p className="font-bold truncate">{peer.name}</p>
+                                <p className="text-xs text-gray-400 truncate">ID: {peer.search_id || "未設定"}</p>
                                 <p className="text-xs text-gray-400 truncate">{isBlocked ? "ブロック中" : ""}</p>
                               </div>
                             </div>
@@ -2475,6 +2561,50 @@ export default function App() {
             <p className="text-[11px] text-gray-500">
               IDはこのアカウント専用のメールアドレスとして登録されます。UUIDはそのまま、データもそのままです。
             </p>
+          </div>
+        </div>
+      )}
+
+      {showQrModal && currentUser && (
+        <div className="fixed inset-0 z-[76] flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowQrModal(false)} />
+          <div className="relative w-full max-w-sm bg-white rounded-[2rem] p-6 shadow-2xl space-y-4 text-center">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-black">My QR</h4>
+              <button onClick={() => setShowQrModal(false)} className="p-2 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-gray-500">このQRを見せると、相手はあなたのIDを読み取って申請できます。</p>
+            <div className="flex justify-center">
+              {friendQrDataUrl ? (
+                <img src={friendQrDataUrl} alt="My QR" className="w-60 h-60 rounded-3xl border border-gray-100 bg-white p-3" />
+              ) : (
+                <div className="w-60 h-60 rounded-3xl border border-dashed border-gray-200 grid place-items-center text-gray-400">
+                  IDを設定するとQRが表示されます。
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 break-all">ID: {currentUser.search_id || "未設定"}</p>
+          </div>
+        </div>
+      )}
+
+      {showQrScanner && (
+        <div className="fixed inset-0 z-[77] flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/60" onClick={stopScanner} />
+          <div className="relative w-full max-w-md bg-white rounded-[2rem] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-black">QRを読み取る</h4>
+              <button onClick={stopScanner} className="p-2 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+            <div className="overflow-hidden rounded-3xl bg-black aspect-square">
+              <video ref={scannerVideoRef} className="w-full h-full object-cover" playsInline muted />
+            </div>
+            <p className="text-sm text-gray-500">カメラでQRを映してください。読み取ると自動で検索します。</p>
+            {scanMessage && <p className="text-sm font-bold text-red-500">{scanMessage}</p>}
+            <div className="flex gap-2">
+              <Button onClick={startScanner} className="flex-1">カメラ起動</Button>
+              <Button onClick={stopScanner} variant="ghost" className="flex-1">閉じる</Button>
+            </div>
           </div>
         </div>
       )}
