@@ -2769,7 +2769,7 @@ export default function App() {
 
       <AnimatePresence>
         {showRequestModal && requestTarget && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-6">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
