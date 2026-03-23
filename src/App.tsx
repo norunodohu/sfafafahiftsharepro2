@@ -32,10 +32,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
-  GoogleAuthProvider, 
   signOut, 
   signInWithCustomToken,
-  unlink,
   EmailAuthProvider,
   linkWithCredential,
   updateEmail,
@@ -2138,9 +2136,9 @@ export default function App() {
                       サインイン方法
                     </h3>
                     <p className="text-sm text-gray-500">
-                      LINE / Google / ID のどれで入っても同じアカウントに紐づきます。
+                      LINE / ID のどれで入っても同じアカウントに紐づきます。
                     </p>
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div className={`w-full p-4 rounded-2xl border flex flex-col gap-2 justify-center ${isLineSignedIn ? "bg-emerald-50 border-emerald-100" : "bg-gray-50 border-gray-100"}`}>
                         <div className={`flex items-center gap-2 font-bold ${isLineSignedIn ? "text-emerald-700" : "text-gray-500"}`}>
                           <Check size={18} className={isLineSignedIn ? "text-emerald-600" : "text-gray-300"} />
@@ -2148,21 +2146,6 @@ export default function App() {
                         </div>
                         <Button onClick={isLineSignedIn ? handleUnlinkLine : handleLineLogin} variant={isLineSignedIn ? "ghost" : "line"} className="w-full text-sm">
                           {isLineSignedIn ? "解除" : "ログイン"}
-                        </Button>
-                      </div>
-
-                      <div className={`w-full p-4 rounded-2xl border flex flex-col gap-2 justify-center ${isGoogleSignedIn ? "bg-emerald-50 border-emerald-100" : "bg-gray-50 border-gray-100"}`}>
-                        <div className={`flex items-center gap-2 font-bold ${isGoogleSignedIn ? "text-emerald-700" : "text-gray-500"}`}>
-                          <Check size={18} className={isGoogleSignedIn ? "text-emerald-600" : "text-gray-300"} />
-                          {isGoogleSignedIn ? "Google連携中" : "Google連携"}
-                        </div>
-                        <div className="text-xs space-y-1">
-                          {isGoogleSignedIn && currentUser?.google_email && (
-                            <p className="text-emerald-700 font-semibold break-all">{maskEmailAfterFirstThree(currentUser.google_email)}</p>
-                          )}
-                        </div>
-                        <Button onClick={isGoogleSignedIn ? handleUnlinkGoogle : handleGoogleLogin} variant={isGoogleSignedIn ? "ghost" : "outline"} className="w-full text-sm">
-                          {isGoogleSignedIn ? "解除" : "連携"}
                         </Button>
                       </div>
 
