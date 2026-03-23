@@ -212,8 +212,10 @@ interface Connection {
   id: string;
   user1_id: string;
   user2_id: string;
-  status: "active" | "blocked";
+  status: "active" | "blocked" | "pending";
   blocked_by?: string;
+  requested_by?: string;
+  requested_at?: unknown;
 }
 
 interface Preset {
@@ -317,6 +319,9 @@ export default function App() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionUsers, setConnectionUsers] = useState<UserProfile[]>([]);
+  const [friendSearchId, setFriendSearchId] = useState("");
+  const [friendSearchResult, setFriendSearchResult] = useState<UserProfile | null>(null);
+  const [friendSearchStatus, setFriendSearchStatus] = useState<"idle" | "found" | "not_found" | "pending" | "sent">("idle");
   
   const [view, setView] = useState<"myboard" | "friends" | "settings">("myboard");
   const [selectedDate, setSelectedDate] = useState(new Date());
