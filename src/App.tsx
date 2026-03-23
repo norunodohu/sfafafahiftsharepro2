@@ -1442,7 +1442,7 @@ export default function App() {
 
   const handleCancelPendingRequest = async (request: ShiftRequest) => {
     if (!currentUser) return;
-    await updateDoc(doc(db, "requests", request.id), { status: "canceled" });
+    await deleteDoc(doc(db, "requests", request.id));
     await updateDoc(doc(db, "availabilities", request.availability_id), { status: "open" });
     await createNotification(
       request.manager_id,
@@ -1891,17 +1891,29 @@ export default function App() {
                     </div>
                     <div className="grid gap-3">
                       {groupedPublicAvailabilities[date].map(a => {
-                        const isBusy = a.status === "confirmed" || a.status === "busy" || a.status === "pending";
                         const isMyPendingRequest = isPendingMyRequest(a.id);
                         const isMyApprovedRequest = isApprovedMyRequest(a.id);
                         const myRequest = getMyRequest(a.id);
+                        const otherPendingRequest = currentUser ? requests.some(r =>
+                          r.availability_id === a.id &&
+                          r.status === "pending" &&
+                          r.manager_id !== currentUser.uid
+                        ) : false;
+                        const effectiveStatus = isMyPendingRequest
+                          ? "pending"
+                          : isMyApprovedRequest
+                            ? "confirmed"
+                            : otherPendingRequest
+                              ? "pending"
+                              : (a.status === "confirmed" ? "confirmed" : a.status === "busy" ? "busy" : "open");
+                        const isBusy = effectiveStatus === "confirmed" || effectiveStatus === "busy" || effectiveStatus === "pending";
                         const buttonLabel = isMyPendingRequest
                           ? "依頼中"
                           : isMyApprovedRequest
                             ? "依頼確定"
-                            : a.status === "confirmed"
+                            : effectiveStatus === "confirmed"
                               ? "確定"
-                              : a.status === "pending"
+                              : effectiveStatus === "pending"
                                 ? "やり取り中"
                                 : "依頼を送る";
                         return (
@@ -1910,8 +1922,8 @@ export default function App() {
                             <p className="text-lg font-semibold text-gray-700">{a.start_time} - {a.end_time}</p>
                             {isMyPendingRequest && <p className="text-xs text-amber-600 mt-1">依頼中</p>}
                             {isMyApprovedRequest && <p className="text-xs text-emerald-600 mt-1">依頼確定</p>}
-                            {!isMyPendingRequest && !isMyApprovedRequest && a.status === "confirmed" && <p className="text-xs text-emerald-600 mt-1">確定</p>}
-                            {!isMyPendingRequest && !isMyApprovedRequest && a.status === "pending" && <p className="text-xs text-amber-600 mt-1">やり取り中</p>}
+                            {!isMyPendingRequest && !isMyApprovedRequest && effectiveStatus === "confirmed" && <p className="text-xs text-emerald-600 mt-1">確定</p>}
+                            {!isMyPendingRequest && !isMyApprovedRequest && effectiveStatus === "pending" && <p className="text-xs text-amber-600 mt-1">やり取り中</p>}
                           </div>
                           <button
                             onClick={async () => {
@@ -1932,6 +1944,10 @@ export default function App() {
                               }
                               if (!isLoggedIn) {
                                 alert("依頼を送るにはログインが必要です。");
+                                return;
+                              }
+                              if (otherPendingRequest) {
+                                alert("他のひとがやり取り中です。");
                                 return;
                               }
                               if (!myRequest) openRequestModal(a);
