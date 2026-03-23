@@ -461,10 +461,9 @@ export default function App() {
         .filter(c => c.status === "active" && ([c.user1_id, c.user2_id].includes(currentUser.uid)))
         .map(c => (c.user1_id === currentUser.uid ? c.user2_id : c.user1_id))
     : [];
-  const isViewingOwnPublicPage = Boolean(currentUser && publicUser && currentUser.uid === publicUser.uid);
   const publicFriendCount = currentFriendIds.length;
-  const hasFriendAccess = Boolean(isViewingOwnPublicPage && publicFriendCount >= 2);
-  const publicFriendIds = isViewingOwnPublicPage ? currentFriendIds : [];
+  const hasFriendAccess = Boolean(currentUser && publicFriendCount >= 2);
+  const publicFriendIds = currentFriendIds;
   const publicFriendAvailabilities = availabilities
     .filter(() => !isPublicHidden)
     .filter(a => hasFriendAccess ? publicFriendIds.includes(a.user_id) : false)
