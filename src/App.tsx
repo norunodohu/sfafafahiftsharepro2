@@ -1387,6 +1387,56 @@ export default function App() {
     setConnections(prev => prev.filter(c => !(c.user1_id === currentUser.uid && c.user2_id === peerId) && !(c.user2_id === currentUser.uid && c.user1_id === peerId)));
   };
 
+  const handleSearchFriendById = async () => {
+    if (!currentUser) return;
+    const id = friendSearchId.trim();
+    if (!id) return;
+    if (id === currentUser.search_id) {
+      setFriendSearchResult(null);
+      setFriendSearchStatus("not_found");
+      return;
+    }
+
+    const snap = await getDocs(query(collection(db, "users"), where("search_id", "==", id)));
+    if (snap.empty) {
+      setFriendSearchResult(null);
+      setFriendSearchStatus("not_found");
+      return;
+    }
+
+    const user = snap.docs[0].data() as UserProfile;
+    const relation = connections.find(c =>
+      (c.user1_id === currentUser.uid && c.user2_id === user.uid) ||
+      (c.user2_id === currentUser.uid && c.user1_id === user.uid)
+    );
+
+    setFriendSearchResult(user);
+    setFriendSearchStatus(relation?.status === "pending" ? "pending" : "found");
+  };
+
+  const handleSendFriendRequest = async (target: UserProfile) => {
+    if (!currentUser) return;
+    const pairId = [currentUser.uid, target.uid].sort().join("_");
+    await setDoc(doc(db, "connections", pairId), {
+      user1_id: currentUser.uid,
+      user2_id: target.uid,
+      status: "pending",
+      requested_by: currentUser.uid,
+      requested_at: serverTimestamp()
+    }, { merge: true });
+    setConnections(prev => {
+      const withoutPair = prev.filter(c => !((c.user1_id === currentUser.uid && c.user2_id === target.uid) || (c.user2_id === currentUser.uid && c.user1_id === target.uid)));
+      return [...withoutPair, {
+        id: pairId,
+        user1_id: currentUser.uid,
+        user2_id: target.uid,
+        status: "pending",
+        requested_by: currentUser.uid,
+      }];
+    });
+    setFriendSearchStatus("sent");
+  };
+
   const handleBlock = async (peerId: string) => {
     if (!currentUser) return;
     const pairId = [currentUser.uid, peerId].sort().join("_");
@@ -2054,7 +2104,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="px-4 py-10 text-center text-gray-400 font-bold bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                      フレンドがまだいません。招待リンクを送ってみましょう。
+                      フレンドがまだいません。ID検索からフレンド申請するか公開URLを送って登録してもらってください。
                     </div>
                   )}
                 </Card>
