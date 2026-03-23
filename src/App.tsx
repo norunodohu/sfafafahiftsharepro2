@@ -62,6 +62,7 @@ import {
 import { format, addDays, addMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isBefore, startOfDay, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 
 // Firebase Config
 import firebaseConfig from '../firebase-applet-config.json';
@@ -1340,12 +1341,10 @@ export default function App() {
   };
 
   const openRequestModal = (availability: Availability) => {
-    console.log("openRequestModal called", availability.id, availability.date, availability.start_time, availability.end_time);
     setRequestTarget(availability);
     setRequestStart(availability.start_time);
     setRequestEnd(availability.end_time);
     setShowRequestModal(true);
-    console.log("showRequestModal set true");
   };
 
   const handleSendRequest = async (availability: Availability, startTime: string, endTime: string) => {
@@ -2769,58 +2768,61 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showRequestModal && requestTarget && (
-          <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-0 sm:p-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowRequestModal(false)}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={false}
-              animate={false}
-              exit={false}
-              className="relative z-[91] w-full max-w-lg bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl pointer-events-auto"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-black">依頼</h3>
-                <button onClick={() => setShowRequestModal(false)} className="p-2 rounded-full hover:bg-gray-100"><X size={18} /></button>
-              </div>
-              <div className="space-y-4">
-                <div className="rounded-2xl bg-gray-50 p-4">
-                  <p className="font-bold">{format(parseISO(requestTarget.date), "M月d日(E)", { locale: ja })}</p>
-                  <p className="text-sm text-gray-500">{requestTarget.start_time}-{requestTarget.end_time}</p>
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {showRequestModal && requestTarget && (
+            <div className="fixed inset-0 z-[999] flex items-end sm:items-center justify-center p-0 sm:p-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowRequestModal(false)}
+                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={false}
+                animate={false}
+                exit={false}
+                className="relative z-[1000] w-full max-w-lg bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl pointer-events-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-black">依頼</h3>
+                  <button onClick={() => setShowRequestModal(false)} className="p-2 rounded-full hover:bg-gray-100"><X size={18} /></button>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">依頼時間</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input type="time" value={requestStart} onChange={e => setRequestStart(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold" />
-                    <input type="time" value={requestEnd} onChange={e => setRequestEnd(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold" />
+                <div className="space-y-4">
+                  <div className="rounded-2xl bg-gray-50 p-4">
+                    <p className="font-bold">{format(parseISO(requestTarget.date), "M月d日(E)", { locale: ja })}</p>
+                    <p className="text-sm text-gray-500">{requestTarget.start_time}-{requestTarget.end_time}</p>
                   </div>
-                </div>
-                <div className="flex gap-3">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">依頼時間</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input type="time" value={requestStart} onChange={e => setRequestStart(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold" />
+                      <input type="time" value={requestEnd} onChange={e => setRequestEnd(e.target.value)} className="w-full p-4 bg-gray-50 rounded-2xl font-bold" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
                   <Button
                     className="flex-1"
                     onClick={async () => {
-                      console.log("send request clicked", requestTarget?.id, requestStart, requestEnd);
                       await handleSendRequest(requestTarget, requestStart, requestEnd);
                       setShowRequestModal(false);
                     }}
                   >
-                    送信
-                  </Button>
-                  <Button variant="outline" className="flex-1" onClick={() => setShowRequestModal(false)}>
-                    キャンセル
-                  </Button>
+                      送信
+                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={() => setShowRequestModal(false)}>
+                      キャンセル
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       <AnimatePresence>
         {showCalendarModal && calendarMode === "day" && (
