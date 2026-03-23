@@ -983,14 +983,13 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.LIST, "requests")
     );
 
-    // Non-realtime fetch to抑制 read 回数
+    const unsubNotif = onSnapshot(
+      query(collection(db, "notifications"), where("user_id", "==", currentUser.uid), orderBy("timestamp", "desc"), limit(50)),
+      (snap) => setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification))),
+      (err) => handleFirestoreError(err, OperationType.LIST, "notifications")
+    );
+
     (async () => {
-      try {
-        const notifSnap = await getDocs(query(collection(db, "notifications"), where("user_id", "==", currentUser.uid), orderBy("timestamp", "desc"), limit(20)));
-        setNotifications(notifSnap.docs.map(d => ({ id: d.id, ...d.data() } as Notification)));
-      } catch (err) {
-        handleFirestoreError(err, OperationType.LIST, "notifications");
-      }
       try {
         const c1snap = await getDocs(query(collection(db, "connections"), where("user1_id", "==", currentUser.uid)));
         const c2snap = await getDocs(query(collection(db, "connections"), where("user2_id", "==", currentUser.uid)));
@@ -1024,6 +1023,7 @@ export default function App() {
       unsubAvail();
       unsubStaffReq();
       unsubManagerReq();
+      unsubNotif();
       unsubUser();
     };
   }, [currentUser?.uid]);
@@ -1045,7 +1045,7 @@ export default function App() {
       });
       if (hasDeletes) return batch.commit();
     }).catch(() => {});
-  }, [currentUser?.uid]);
+  }, [currentUser?.uid, notifications]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1407,18 +1407,7 @@ export default function App() {
   };
 
   const handleOpenNotifications = async () => {
-    const opening = !showBellDropdown;
-    setShowBellDropdown(opening);
-    try {
-      const unread = notifications.filter(n => !n.read);
-      if (opening && unread.length > 0) {
-        const batch = writeBatch(db);
-        unread.forEach(n => batch.update(doc(db, "notifications", n.id), { read: true }));
-        await batch.commit();
-      }
-    } catch (err) {
-      console.error("Failed to mark notifications as read:", err);
-    }
+    setShowBellDropdown(v => !v);
   };
 
   const handleApproveRequest = async (request: ShiftRequest) => {
@@ -1916,7 +1905,7 @@ export default function App() {
                                 ? "やり取り中"
                                 : "依頼を送る";
                         return (
-                        <Card key={a.id} className={`p-4 sm:p-6 flex items-center justify-between gap-4 ${isBusy && !isMyApprovedRequest ? "opacity-40 grayscale" : ""}`}>
+                        <Card key={a.id} className={`p-4 sm:p-6 flex items-center justify-between gap-4 ${isBusy && !isMyPendingRequest && !isMyApprovedRequest ? "opacity-40 grayscale" : ""}`}>
                           <div className="min-w-0 flex-1">
                             <p className="text-lg font-semibold text-gray-700">{a.start_time} - {a.end_time}</p>
                             {isMyPendingRequest && <p className="text-xs text-amber-600 mt-1">依頼中</p>}
@@ -2059,26 +2048,64 @@ export default function App() {
                   className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-50 relative"
                 >
                   <Bell size={20} />
-                  {notifications.some(n => !n.read) && (
-                    <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1.5 bg-red-500 text-white rounded-full border-2 border-white text-[10px] font-black flex items-center justify-center">
+                      {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                    </span>
                   )}
                 </button>
                 {showBellDropdown && (
                   <div className="absolute right-0 top-14 z-20 w-[min(90vw,24rem)] bg-white rounded-3xl shadow-2xl border border-gray-100 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <p className="font-black text-lg">通知</p>
-                      <span className="text-xs text-gray-400">{notifications.length}件</span>
+                      <div>
+                        <p className="font-black text-lg">通知</p>
+                        <span className="text-xs text-gray-400">{unreadNotificationCount}件未読 / {notifications.length}件</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            const readItems = notifications.filter(n => n.read);
+                            await handleDeleteNotifications(readItems);
+                            setNotificationFeedback("既読を削除しました");
+                            window.setTimeout(() => setNotificationFeedback(""), 1800);
+                          }}
+                          className="text-xs px-3 py-2 rounded-xl bg-gray-50 text-gray-600 hover:bg-gray-100 font-bold"
+                          disabled={notifications.filter(n => n.read).length === 0}
+                        >
+                          既読削除
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await handleDeleteNotifications(notifications);
+                            setNotificationFeedback("すべて削除しました");
+                            window.setTimeout(() => setNotificationFeedback(""), 1800);
+                          }}
+                          className="text-xs px-3 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 font-bold"
+                          disabled={notifications.length === 0}
+                        >
+                          全削除
+                        </button>
+                      </div>
                     </div>
                     <div className="max-h-80 overflow-y-auto space-y-2">
                       {notifications.length > 0 ? notifications.map(notification => (
-                        <div key={notification.id} className={`p-4 rounded-2xl border flex items-start justify-between gap-3 ${notification.read ? "bg-gray-50 border-gray-100" : "bg-blue-50 border-blue-100"}`}>
+                        <div
+                          key={notification.id}
+                          onClick={async () => {
+                            if (!notification.read) {
+                              await handleMarkNotificationRead(notification.id);
+                            }
+                          }}
+                          className={`p-4 rounded-2xl border flex items-start justify-between gap-3 ${notification.read ? "bg-gray-50 border-gray-100 cursor-default" : "bg-blue-50 border-blue-100 cursor-pointer hover:bg-blue-100"}`}
+                        >
                           <div className="min-w-0">
                             <p className="text-sm font-bold">{notification.message}</p>
-                            <p className="text-[11px] text-gray-400 mt-1">{notification.type}</p>
+                            <p className="text-[11px] text-gray-400 mt-1">{notification.type === "request" ? "依頼通知" : notification.type === "approval" ? "承認通知" : notification.type === "decline" ? "取り消し通知" : "システム通知"}</p>
                           </div>
                           <button
-                            onClick={async () => {
-                              await deleteDoc(doc(db, "notifications", notification.id));
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              await handleDeleteNotification(notification.id);
                               setNotificationFeedback("削除しました");
                               window.setTimeout(() => setNotificationFeedback(""), 1800);
                             }}
