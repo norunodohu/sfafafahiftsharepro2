@@ -83,6 +83,12 @@ const avatarSeeds = [
 const presetAvatars = avatarSeeds.map(seed => `https://api.dicebear.com/7.x/adventurer-neutral/svg?seed=${seed}&backgroundColor=transparent`);
 const pickRandomAvatar = () => presetAvatars[Math.floor(Math.random() * presetAvatars.length)];
 const getDefaultTimeStorageKey = (uid: string) => `${DEFAULT_TIME_STORAGE_KEY}_${uid}`;
+const maskEmailAfterFirstThree = (email?: string | null) => {
+  if (!email) return "";
+  const visible = email.slice(0, 3);
+  const masked = "*".repeat(Math.max(email.length - 3, 0));
+  return `${visible}${masked}`;
+};
 
 // Error Handling
 enum OperationType {
@@ -2178,7 +2184,7 @@ export default function App() {
                             {isGoogleSignedIn ? "連携済み" : "連携するとLINEなしでも入れます。"}
                           </p>
                           {isGoogleSignedIn && currentUser?.google_email && (
-                            <p className="text-emerald-700 font-semibold break-all">連携メール: {currentUser.google_email}</p>
+                            <p className="text-emerald-700 font-semibold break-all">{maskEmailAfterFirstThree(currentUser.google_email)}</p>
                           )}
                         </div>
                         <Button onClick={isGoogleSignedIn ? handleUnlinkGoogle : handleGoogleLogin} variant={isGoogleSignedIn ? "ghost" : "outline"} className="w-full text-sm">
