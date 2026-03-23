@@ -1340,10 +1340,12 @@ export default function App() {
   };
 
   const openRequestModal = (availability: Availability) => {
+    console.log("openRequestModal called", availability.id, availability.date, availability.start_time, availability.end_time);
     setRequestTarget(availability);
     setRequestStart(availability.start_time);
     setRequestEnd(availability.end_time);
     setShowRequestModal(true);
+    console.log("showRequestModal set true");
   };
 
   const handleSendRequest = async (availability: Availability, startTime: string, endTime: string) => {
@@ -2803,6 +2805,7 @@ export default function App() {
                   <Button
                     className="flex-1"
                     onClick={async () => {
+                      console.log("send request clicked", requestTarget?.id, requestStart, requestEnd);
                       await handleSendRequest(requestTarget, requestStart, requestEnd);
                       setShowRequestModal(false);
                     }}
