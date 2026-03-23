@@ -378,7 +378,6 @@ export default function App() {
   const [requestTarget, setRequestTarget] = useState<Availability | null>(null);
   const [requestStart, setRequestStart] = useState("");
   const [requestEnd, setRequestEnd] = useState("");
-  const [publicViewScope, setPublicViewScope] = useState<"single" | "friends">("single");
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [publicFilterMode, setPublicFilterMode] = useState<"all" | "open" | "my_requests">("all");
   const [showScheduleList, setShowScheduleList] = useState(false);
@@ -453,6 +452,7 @@ export default function App() {
   const isFriendView = isPublicView && viewKind === "friend";
   const isOwnPreview = isPublicView && Boolean(currentUser?.uid && publicUser?.uid && currentUser.uid === publicUser.uid);
   const selectedFriendUsers = connectionUsers.filter(peer => selectedFriendIds.includes(peer.uid));
+  const selectedFriendLookup = new Map(selectedFriendUsers.map(peer => [peer.uid, peer] as const));
   const incomingRequests = currentUser
     ? requests.filter(r => r.staff_id === currentUser.uid && r.status === "pending")
     : [];
@@ -1704,12 +1704,25 @@ export default function App() {
     setPublicUser(null);
     setViewKind(null);
     setPendingFriendUid("");
+    setSelectedFriendIds([]);
   }, [isPublicView]);
 
   const handleSidebarNav = useCallback((nextView: "myboard" | "friends" | "settings") => {
     setView(nextView);
     exitPublicView();
   }, [exitPublicView]);
+
+  const toggleSelectedFriend = useCallback((friendId: string) => {
+    setSelectedFriendIds(prev => prev.includes(friendId) ? prev.filter(id => id !== friendId) : [...prev, friendId]);
+  }, []);
+
+  const selectAllFriends = useCallback(() => {
+    setSelectedFriendIds(connectionUsers.map(peer => peer.uid));
+  }, [connectionUsers]);
+
+  const clearSelectedFriends = useCallback(() => {
+    setSelectedFriendIds([]);
+  }, []);
 
   const handleOpenFriendView = useCallback((friend: UserProfile) => {
     if (!currentUser?.uid) return;
@@ -1757,27 +1770,6 @@ export default function App() {
           </button>
         ))}
       </nav>
-
-      {isLoggedIn && isPublicView && publicUser && (
-        <div className="pt-6 border-t border-gray-100 space-y-3">
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.22em]">表示切替</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setPublicViewScope("single")}
-              className={`px-3 py-3 rounded-2xl text-sm font-black border transition-all ${publicViewScope === "single" ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100" : "bg-white text-gray-400 border-gray-200 hover:border-blue-200 hover:text-blue-600"}`}
-            >
-              個人
-            </button>
-            <button
-              onClick={() => hasFriendAccess && setPublicViewScope("friends")}
-              disabled={!hasFriendAccess}
-              className={`px-3 py-3 rounded-2xl text-sm font-black border transition-all ${publicViewScope === "friends" ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-100" : hasFriendAccess ? "bg-white text-gray-400 border-gray-200 hover:border-blue-200 hover:text-blue-600" : "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"}`}
-            >
-              フレンド
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="pt-8 border-t border-gray-100">
         <div className="flex items-center gap-4 mb-6">
@@ -1971,11 +1963,13 @@ export default function App() {
                   <p className="text-sm text-gray-500">選ぶと右側に予定が表示されます。</p>
                 </div>
                 <div className="grid gap-3">
-                  {connectionUsers.length > 0 ? connectionUsers.map(peer => (
+                  {connectionUsers.length > 0 ? connectionUsers.map(peer => {
+                    const isSelected = selectedFriendIds.includes(peer.uid);
+                    return (
                     <button
                       key={peer.uid}
-                      onClick={() => handleOpenFriendView(peer)}
-                      className={`w-full rounded-2xl border p-3 text-left transition-all flex items-center gap-3 ${publicUser.uid === peer.uid ? "border-blue-300 bg-blue-50 shadow-sm" : "border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/60"}`}
+                      onClick={() => toggleSelectedFriend(peer.uid)}
+                      className={`w-full rounded-2xl border p-3 text-left transition-all flex items-center gap-3 ${isSelected ? "border-blue-300 bg-blue-50 shadow-sm" : "border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/60"}`}
                     >
                       <div className="w-11 h-11 rounded-full overflow-hidden bg-gray-100 shrink-0">
                         <img
@@ -1988,8 +1982,12 @@ export default function App() {
                         <p className="font-black truncate">{peer.name}</p>
                         <p className="text-xs text-gray-500 truncate">ID: {peer.search_id || "未設定"}</p>
                       </div>
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? "border-blue-600 bg-blue-600" : "border-gray-300 bg-white"}`}>
+                        {isSelected && <span className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
                     </button>
-                  )) : (
+                    );
+                  }) : (
                     <div className="px-4 py-8 text-center text-gray-400 font-bold bg-gray-50 rounded-2xl border border-dashed border-gray-200">
                       フレンドがまだいません。
                     </div>
@@ -2002,14 +2000,16 @@ export default function App() {
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div className="min-w-0">
                       <h1 className="text-3xl font-black tracking-tight">
-                        {publicViewScope === "friends" ? "フレンドの予定" : `${publicUser.name}さんの予定`}
+                        {isFriendView ? "フレンドの予定" : `${publicUser.name}さんの予定`}
                       </h1>
                       <p className="text-sm text-gray-500 mt-1">
-                        {publicUser.search_id ? `ID: ${publicUser.search_id}` : "ID未設定"}
+                        {isFriendView
+                          ? (selectedFriendIds.length > 0 ? `${selectedFriendIds.length}人を選択中` : "左からフレンドを選んでください。")
+                          : (publicUser.search_id ? `ID: ${publicUser.search_id}` : "ID未設定")}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {publicUser.avatar_url || publicUser.line_picture ? (
+                      {!isFriendView && (publicUser.avatar_url || publicUser.line_picture) ? (
                         <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-100">
                           <img
                             src={publicUser.avatar_url || publicUser.line_picture || ""}
@@ -2022,16 +2022,16 @@ export default function App() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
-                      onClick={() => setPublicViewScope("single")}
-                      className={`px-4 py-2 rounded-xl text-sm font-black border ${publicViewScope === "single" ? "bg-blue-600 text-white border-blue-600 shadow-sm" : "bg-white text-gray-400 border-gray-200"}`}
+                      onClick={selectAllFriends}
+                      className="px-4 py-2 rounded-xl text-sm font-black border border-gray-200 bg-white text-gray-500 hover:border-blue-200 hover:text-blue-600"
                     >
-                      個人
+                      全選択
                     </button>
                     <button
-                      onClick={() => hasFriendAccess && setPublicViewScope("friends")}
-                      className={`px-4 py-2 rounded-xl text-sm font-black border ${publicViewScope === "friends" ? "bg-blue-600 text-white border-blue-600 shadow-sm" : "bg-white border-gray-200"} ${hasFriendAccess ? "text-gray-400" : "text-gray-300 opacity-50 cursor-not-allowed"}`}
+                      onClick={clearSelectedFriends}
+                      className="px-4 py-2 rounded-xl text-sm font-black border border-gray-200 bg-white text-gray-500 hover:border-blue-200 hover:text-blue-600"
                     >
-                      フレンドまとめて
+                      解除
                     </button>
                     <div className="w-2" />
                     <button
@@ -2056,7 +2056,11 @@ export default function App() {
                 </Card>
 
             <div className="grid gap-4">
-              {isPublicHidden ? (
+              {isFriendView && selectedFriendIds.length === 0 ? (
+                <div className="py-12 text-center bg-white rounded-3xl border border-dashed border-gray-200 text-gray-500 font-bold">
+                  フレンドを選ぶと予定が表示されます。
+                </div>
+              ) : isPublicHidden ? (
                 <div className="py-12 text-center bg-white rounded-3xl border border-dashed border-gray-200 text-gray-500 font-bold">
                   現在このユーザーの予定は非公開です。
                 </div>
@@ -2068,6 +2072,7 @@ export default function App() {
                     </div>
                     <div className="grid gap-3">
                       {groupedPublicAvailabilities[date].map(a => {
+                        const owner = isFriendView ? selectedFriendLookup.get(a.user_id) : publicUser;
                         const isMyPendingRequest = isPendingMyRequest(a.id);
                         const isMyApprovedRequest = isApprovedMyRequest(a.id);
                         const myRequest = getMyRequest(a.id);
@@ -2095,7 +2100,20 @@ export default function App() {
                                 : "依頼を送る";
                         return (
                         <Card key={a.id} className={`p-4 sm:p-6 flex items-center justify-between gap-4 ${isBusy && !isMyPendingRequest && !isMyApprovedRequest ? "opacity-40 grayscale" : ""}`}>
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 shrink-0">
+                                <img
+                                  src={owner?.avatar_url || owner?.line_picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${owner?.name || a.user_id}`}
+                                  alt={owner?.name || "フレンド"}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-black text-gray-900 truncate">{owner?.name || "フレンド"}</p>
+                                <p className="text-xs text-gray-500 truncate">{owner?.search_id ? `ID: ${owner.search_id}` : "ID未設定"}</p>
+                              </div>
+                            </div>
                             <p className="text-lg font-semibold text-gray-700">{a.start_time} - {a.end_time}</p>
                             {isMyPendingRequest && <p className="text-xs text-amber-600 mt-1">依頼中</p>}
                             {isMyApprovedRequest && <p className="text-xs text-emerald-600 mt-1">依頼確定</p>}
@@ -2164,8 +2182,6 @@ export default function App() {
           {statusMessageNode}
           </div>
         </div>
-        </div>
-      </div>
     );
   }
 
